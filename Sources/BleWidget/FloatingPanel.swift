@@ -5,8 +5,7 @@ import AppKit
 import BleWidgetCore
 
 final class FloatingPanel: NSPanel {
-    private static let posKeyPrefix = "totemPanelFrame"
-    private static let lockKey = "totemPanelLocked"
+    private let settings = AppSettings()
 
     private let layerLabel = NSTextField(labelWithString: "")
     private let modLabels: [NSTextField] = ["⇧", "⌃", "⌥", "⌘"].map {
@@ -14,9 +13,9 @@ final class FloatingPanel: NSPanel {
     }
 
     var isLocked: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.lockKey) }
+        get { settings.locked }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.lockKey)
+            settings.locked = newValue
             ignoresMouseEvents = newValue
         }
     }
@@ -64,18 +63,17 @@ final class FloatingPanel: NSPanel {
 
         contentView = content
         restorePosition()
-        if UserDefaults.standard.object(forKey: positionKey()) == nil {
+        if !settings.hasPosition(screenID: screenID()) {
             setDefaultPosition()
         }
     }
 
-    private func positionKey() -> String {
-        let screenID = NSScreen.main?.localizedName ?? "default"
-        return "\(Self.posKeyPrefix).\(screenID)"
+    private func screenID() -> String {
+        NSScreen.main?.localizedName ?? "default"
     }
 
     private func restorePosition() {
-        if let saved = UserDefaults.standard.string(forKey: positionKey()) {
+        if let saved = settings.position(screenID: screenID()) {
             let parts = saved.split(separator: ",").compactMap { Double($0) }
             if parts.count == 2 {
                 setFrameOrigin(NSPoint(x: parts[0], y: parts[1]))
@@ -110,7 +108,7 @@ final class FloatingPanel: NSPanel {
 
     func savePosition() {
         let p = frame.origin
-        UserDefaults.standard.set("\(p.x),\(p.y)", forKey: positionKey())
+        settings.setPosition("\(p.x),\(p.y)", screenID: screenID())
     }
 
     override func mouseUp(with event: NSEvent) {

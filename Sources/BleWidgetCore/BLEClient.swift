@@ -14,6 +14,13 @@ public enum BLEConnectionState {
 public protocol BLEClientDelegate: AnyObject {
     func bleClient(_ client: BLEClient, didUpdate status: KeyboardStatus)
     func bleClient(_ client: BLEClient, didChangeState state: BLEConnectionState)
+    func bleClient(_ client: BLEClient, didChangeActiveKeyboard keyboard: CompatibleKeyboard?)
+    func bleClient(_ client: BLEClient, didUpdateCandidates keyboards: [CompatibleKeyboard])
+}
+
+public extension BLEClientDelegate {
+    func bleClient(_ client: BLEClient, didChangeActiveKeyboard keyboard: CompatibleKeyboard?) {}
+    func bleClient(_ client: BLEClient, didUpdateCandidates keyboards: [CompatibleKeyboard]) {}
 }
 
 public final class BLEClient: NSObject {
@@ -27,10 +34,13 @@ public final class BLEClient: NSObject {
 
     public weak var delegate: BLEClientDelegate?
 
+    private let settings = AppSettings()
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristic: CBCharacteristic?
     private var knownIdentifier: UUID?
+    private var activeKeyboard: CompatibleKeyboard?
+    private var candidatePeripherals: [CBPeripheral] = []
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 3
 
@@ -43,20 +53,59 @@ public final class BLEClient: NSObject {
         attemptConnect()
     }
 
+    /// Explicit user selection from the menu-bar chooser (FR-014/FR-015/FR-016):
+    /// persist the choice and switch the single active connection to it.
+    public func select(_ identifier: UUID) {
+        settings.selectedKeyboardIdentifier = identifier
+        knownIdentifier = identifier
+        if let current = peripheral, current.identifier != identifier {
+            central.cancelPeripheralConnection(current)
+            peripheral = nil
+            characteristic = nil
+            activeKeyboard = nil
+        }
+        if let p = candidatePeripherals.first(where: { $0.identifier == identifier })
+            ?? central.retrievePeripherals(withIdentifiers: [identifier]).first {
+            connect(p)
+        } else {
+            scheduleReconnect()
+        }
+    }
+
     private func attemptConnect() {
         guard central.state == .poweredOn else { return }
         let connected = central.retrieveConnectedPeripherals(
             withServices: [Self.hidServiceUUID, Self.serviceUUID]
         )
-        let candidate = connected.first {
-            $0.name?.localizedCaseInsensitiveContains("TOTEM") == true ||
-            ($0.identifier == knownIdentifier)
-        }
-        if let p = candidate {
+        candidatePeripherals = connected
+        publishCandidates()
+
+        if peripheral != nil { return }
+
+        let ids = connected.map { $0.identifier }
+        if let chosen = CompatibleKeyboard.resolveSelection(
+               candidates: ids, remembered: settings.selectedKeyboardIdentifier
+           ),
+           let p = connected.first(where: { $0.identifier == chosen }) {
+            settings.selectedKeyboardIdentifier = chosen
+            knownIdentifier = chosen
             connect(p)
         } else {
             scheduleReconnect()
         }
+    }
+
+    private func publishCandidates() {
+        let active = activeKeyboard?.identifier
+        let list = candidatePeripherals.map { p in
+            CompatibleKeyboard(
+                identifier: p.identifier,
+                name: p.name,
+                state: p.identifier == active ? .connected : .notConnected,
+                isCompatible: true
+            )
+        }
+        delegate?.bleClient(self, didUpdateCandidates: list)
     }
 
     private func connect(_ p: CBPeripheral) {
@@ -81,6 +130,7 @@ public final class BLEClient: NSObject {
         }
         peripheral = nil
         characteristic = nil
+        activeKeyboard = nil
         reconnectTimer?.invalidate()
     }
 }
@@ -113,7 +163,10 @@ extension BLEClient: CBCentralManagerDelegate {
     ) {
         self.peripheral = nil
         self.characteristic = nil
+        activeKeyboard = nil
         delegate?.bleClient(self, didChangeState: .notConnected)
+        delegate?.bleClient(self, didChangeActiveKeyboard: nil)
+        publishCandidates()
         scheduleReconnect()
     }
 
@@ -123,7 +176,10 @@ extension BLEClient: CBCentralManagerDelegate {
         error: Error?
     ) {
         self.peripheral = nil
+        activeKeyboard = nil
         delegate?.bleClient(self, didChangeState: .notConnected)
+        delegate?.bleClient(self, didChangeActiveKeyboard: nil)
+        publishCandidates()
         scheduleReconnect()
     }
 }
@@ -133,9 +189,14 @@ extension BLEClient: CBPeripheralDelegate {
         _ peripheral: CBPeripheral,
         didDiscoverServices error: Error?
     ) {
-        guard let service = peripheral.services?.first(
-            where: { $0.uuid == Self.serviceUUID }
-        ) else {
+        let discovered = (peripheral.services ?? []).map { $0.uuid }
+        guard CompatibleKeyboard.isCompatible(discoveredServiceUUIDs: discovered),
+              let service = peripheral.services?.first(
+                  where: { $0.uuid == Self.serviceUUID }
+              )
+        else {
+            central.cancelPeripheralConnection(peripheral)
+            self.peripheral = nil
             scheduleReconnect(); return
         }
         peripheral.discoverCharacteristics([Self.characteristicUUID], for: service)
@@ -152,7 +213,16 @@ extension BLEClient: CBPeripheralDelegate {
         characteristic = ch
         peripheral.readValue(for: ch)
         peripheral.setNotifyValue(true, for: ch)
+        let keyboard = CompatibleKeyboard(
+            identifier: peripheral.identifier,
+            name: peripheral.name,
+            state: .connected,
+            isCompatible: true
+        )
+        activeKeyboard = keyboard
         delegate?.bleClient(self, didChangeState: .connected)
+        delegate?.bleClient(self, didChangeActiveKeyboard: keyboard)
+        publishCandidates()
     }
 
     public func peripheral(
