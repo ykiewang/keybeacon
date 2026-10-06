@@ -41,18 +41,31 @@ This repository is the **home of three things**:
    latest `BleWidget-<version>.dmg` (or `.zip`).
 2. Open the `.dmg` and drag **BleWidget.app** out (or just double-click it from the `.zip`).
 3. **First launch (important):** this build is **not yet code-signed/notarized**, so macOS
-   Gatekeeper will warn on first open. **Right-click the app → Open → confirm once.** You only
-   need to do this the first time. (Alternatively: `xattr -dr com.apple.quarantine BleWidget.app`.)
+   Gatekeeper blocks it on first open. **Drag BleWidget.app out of the `.dmg`** (to `/Applications`
+   or the Desktop) and **eject the disk image first** — you can't clear the quarantine flag while
+   the app sits on the read-only image. Then open it once per the workaround below.
 4. When prompted, **grant Bluetooth permission**. The app lives in the **menu bar** (no Dock
    icon). Connect a compatible keyboard and its live layer/modifier status appears.
 
 No terminal, no build tools, no source checkout required.
 
-### Why the first-launch warning?
+### First launch: Gatekeeper workaround
 
-Signing + notarization require a paid Apple Developer ID, which is a pending prerequisite. Until
-it is in place, releases are **unsigned** and the one-time right-click-Open step above is needed.
-A future signed release will remove this step.
+Signing + notarization require a paid Apple Developer ID (a pending prerequisite), so releases are
+currently **unsigned** and macOS quarantines the download. After dragging the app out of the `.dmg`
+and ejecting the image, handle whichever prompt you get:
+
+- **"BleWidget can't be opened because it is from an unidentified developer"**: right-click the app
+  → **Open** → confirm once.
+- **"BleWidget is damaged and can't be opened. You should eject the disk image."** (common on Apple
+  Silicon): the right-click trick does **not** work — clear the quarantine flag once in Terminal
+  (adjust the path to where you moved the app):
+
+  ```
+  xattr -cr /Applications/BleWidget.app
+  ```
+
+You only need this the first time. A future signed release will remove the step entirely.
 
 > **Known limitation this iteration**: because the artifact is unsigned, the "zero-warning,
 > double-click, under-5-minutes" goals (spec SC-001/SC-002) and signing (FR-002) are **not met
@@ -134,18 +147,28 @@ Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操�
 1. 打开 [Releases](https://github.com/ykiewang/keybeacon/releases) 页面,下载最新的
    `BleWidget-<版本>.dmg`(或 `.zip`)。
 2. 打开 `.dmg` 把 **BleWidget.app** 拖出来(或直接从 `.zip` 里双击运行)。
-3. **首次启动(重要):** 当前构建**尚未签名/公证**,macOS Gatekeeper 会在首次打开时警告。
-   **右键点应用 → 打开 → 确认一次**即可,仅首次需要。(或执行:
-   `xattr -dr com.apple.quarantine BleWidget.app`。)
+3. **首次启动(重要):** 当前构建**尚未签名/公证**,macOS Gatekeeper 会在首次打开时拦截。请**先把
+   BleWidget.app 从 `.dmg` 拖出来**(放到「应用程序」或桌面),并**先推出该磁盘映像**——app 停留在只读
+   映像里时无法清除隔离标记。然后按下方的"首次启动:绕过 Gatekeeper"操作打开一次即可。
 4. 按提示**授予蓝牙权限**。应用常驻**菜单栏**(无 Dock 图标)。连接一把兼容键盘,其实时的
    层/修饰键状态即会显示。
 
 无需终端、无需构建工具、无需拉取源码。
 
-### 为什么首次启动会警告?
+### 首次启动:绕过 Gatekeeper
 
-签名 + 公证需要付费的 Apple Developer ID,这是一个待满足的前置条件。在它就位之前,发布产物均为
-**未签名**,因此需要上面那一次性的右键打开步骤。将来的签名版本会移除这一步。
+签名 + 公证需要付费的 Apple Developer ID(待满足的前置条件),因此当前发布产物均为**未签名**,macOS
+会给下载的 app 加上隔离标记。把 app 从 `.dmg` 拖出并推出映像后,按你看到的提示处理:
+
+- 若提示**"无法打开,因为来自身份不明的开发者"**:右键点应用 → **打开** → 确认一次。
+- 若提示**"'BleWidget'已损坏,无法打开。你应该推出磁盘映像。"**(Apple Silicon 上常见):右键打开在
+  这种情况下**无效**,改在「终端」里执行一次以下命令清除隔离标记(把路径改成你实际放置 app 的位置):
+
+  ```
+  xattr -cr /Applications/BleWidget.app
+  ```
+
+仅首次需要。将来的签名版本会彻底移除这一步。
 
 > **本期已知限制**:由于产物未签名,"零警告、双击即开、5 分钟内完成"的目标(规范 SC-001/SC-002)
 > 与签名(FR-002)**本期尚未达成** —— 它们顺延到签名版本的后续迭代。其余(下载、运行、实时状态)
