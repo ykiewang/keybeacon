@@ -1,5 +1,9 @@
 # KeyBeacon
 
+**English** · [中文](#zh)
+
+<a id="en"></a>
+
 **KeyBeacon** shows your keyboard's live internal state — the **active layer** and the **held
 modifier keys** — in a small desktop app, over Bluetooth LE. It works with any keyboard that
 implements the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
@@ -73,3 +77,80 @@ python3 conformance/conformance_tool.py
 
 MIT — see [LICENSE](LICENSE). The protocol is intentionally permissively licensed so any keyboard
 or app may implement it.
+
+---
+
+<a id="zh"></a>
+
+# KeyBeacon(中文)
+
+[English](#en) · **中文**
+
+**KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与
+**按住的修饰键**。它适用于任何实现了开放的 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
+
+本仓库是**三样东西的归属地**:
+
+| 目录 | 内容 |
+|------|------|
+| [`app/macos/`](app/macos/) | macOS 应用(菜单栏小组件 + 悬浮状态面板)。 |
+| [`protocol/`](protocol/) | 权威、带版本的 **KeyBeacon 协议** 标准(KBP)。 |
+| [`conformance/`](conformance/) | **一致性套件** —— 面向键盘作者的指南 + 清单 + 自测工具。 |
+
+> **平台状态**:macOS 现已可用。**Windows 与 Linux 顺延至下一期**(暂不可用)。协议在设计上与
+> 操作系统无关。
+
+## 下载即用(macOS)
+
+1. 打开 [Releases](https://github.com/ykiewang/keybeacon/releases) 页面,下载最新的
+   `BleWidget-<版本>.dmg`(或 `.zip`)。
+2. 打开 `.dmg` 把 **BleWidget.app** 拖出来(或直接从 `.zip` 里双击运行)。
+3. **首次启动(重要):** 当前构建**尚未签名/公证**,macOS Gatekeeper 会在首次打开时警告。
+   **右键点应用 → 打开 → 确认一次**即可,仅首次需要。(或执行:
+   `xattr -dr com.apple.quarantine BleWidget.app`。)
+4. 按提示**授予蓝牙权限**。应用常驻**菜单栏**(无 Dock 图标)。连接一把兼容键盘,其实时的
+   层/修饰键状态即会显示。
+
+无需终端、无需构建工具、无需拉取源码。
+
+### 为什么首次启动会警告?
+
+签名 + 公证需要付费的 Apple Developer ID,这是一个待满足的前置条件。在它就位之前,发布产物均为
+**未签名**,因此需要上面那一次性的右键打开步骤。将来的签名版本会移除这一步。
+
+> **本期已知限制**:由于产物未签名,"零警告、双击即开、5 分钟内完成"的目标(规范 SC-001/SC-002)
+> 与签名(FR-002)**本期尚未达成** —— 它们顺延到签名版本的后续迭代。其余(下载、运行、实时状态)
+> 今天即可用。
+
+## 环境要求
+
+- macOS 12(Monterey)或更高版本。
+- 一把在其宿主链路(central)BLE 角色上实现了 KBP 的键盘 —— 见
+  [`conformance/`](conformance/)。
+
+## 从源码构建(可选)
+
+```bash
+cd app/macos
+swift build -c release        # 或:swift run BleWidget
+swift test                    # 纯逻辑单元测试
+```
+
+本地打包可分发的产物:
+
+```bash
+./packaging/make-app.sh 0.0.0-dev   # → dist/BleWidget.app、.dmg、.zip、.sha256
+```
+
+## 面向键盘作者
+
+让你的键盘兼容 KeyBeacon 并加以验证:阅读 [`protocol/README.md`](protocol/README.md)(标准)与
+[`conformance/CONFORMANCE.md`](conformance/CONFORMANCE.md)(需要实现什么),然后运行自测工具:
+
+```bash
+python3 conformance/conformance_tool.py
+```
+
+## 许可
+
+MIT —— 见 [LICENSE](LICENSE)。协议特意采用宽松许可,任何键盘或应用都可实现。
