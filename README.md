@@ -8,6 +8,22 @@
 modifier keys** — in a small desktop app, over Bluetooth LE. It works with any keyboard that
 implements the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
 
+## Why KeyBeacon
+
+Many ZMK keyboards — the Totem among them — have **no screen**. You press a layer key and have no
+on-device way to confirm which layer is actually active. The usual answer is to add hardware: a
+small OLED/display, extra wiring, extra firmware, extra cost.
+
+KeyBeacon takes the opposite approach. The host your keyboard is already connected to **has** a
+screen, so let the software show the state instead of bolting on hardware. The keyboard simply
+reports what it knows over its existing BLE link, and the desktop app displays it. **No extra
+hardware, no screen, no soldering** — a displayless keyboard gains a display for free.
+
+**Vision**: start with layer + modifiers, but grow into a **general-purpose window into a keyboard's
+internal state**. The protocol is versioned and extensible by design, so future versions can surface
+more of what the keyboard knows but can't otherwise show — e.g. battery level, active output/profile,
+connection status, caps-word/sticky state — for **any** keyboard that speaks KBP, on any OS.
+
 This repository is the **home of three things**:
 
 | Directory | What |
@@ -88,6 +104,19 @@ or app may implement it.
 
 **KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与
 **按住的修饰键**。它适用于任何实现了开放的 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
+
+## 初衷与愿景
+
+很多 ZMK 键盘 —— 比如 Totem —— **没有屏幕**。你按下层切换键,却无法在键盘本体上确认当前究竟在哪一
+层。常见的解法是加硬件:一小块 OLED/显示屏、额外走线、额外固件、额外成本。
+
+KeyBeacon 反其道而行。你的键盘本就连着的那台电脑**有**屏幕,那就用软件来显示状态,而不是再外挂一块
+硬件。键盘只需把自己知道的信息通过既有的 BLE 链路上报,桌面应用负责显示。**不需要额外硬件、不需要
+屏幕、不需要焊接** —— 一把没有显示屏的键盘,就这样免费获得了"显示屏"。
+
+**愿景**:从"层 + 修饰键"起步,逐步成长为一个**通用的键盘内部状态窗口**。协议在设计上即是带版本、
+可扩展的,因此未来版本可以呈现更多键盘已知、却无从展示的信息 —— 例如电量、当前输出/配置、连接状态、
+Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操作系统。
 
 本仓库是**三样东西的归属地**:
 
