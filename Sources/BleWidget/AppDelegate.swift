@@ -81,15 +81,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     private func updateMenuBarIcon() {
         let symbol: String
+        let fallback: String
         switch state {
-        case .connected: symbol = "keyboard"
-        case .connecting: symbol = "keyboard.badge.ellipsis"
-        case .notConnected: symbol = "keyboard.slash"
-        case .unavailable: symbol = "bolt.slash"
+        case .connected: symbol = "keyboard"; fallback = "⌨︎"
+        case .connecting: symbol = "keyboard.badge.ellipsis"; fallback = "⌨…"
+        case .notConnected: symbol = "keyboard.slash"; fallback = "⌨✕"
+        case .unavailable: symbol = "bolt.slash"; fallback = "⚡︎✕"
         }
-        statusItem.button?.image = NSImage(
-            systemSymbolName: symbol, accessibilityDescription: nil
-        )
+        guard let button = statusItem.button else { return }
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
+            button.image = image
+            button.title = ""
+        } else {
+            button.image = nil
+            button.title = fallback
+        }
     }
 
     @objc private func reconnect() {
