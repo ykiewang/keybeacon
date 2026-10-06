@@ -108,14 +108,14 @@ jobs:
             echo "| \`signing_state\` | $STATE |"
             echo
             if [[ "$STATE" == "unsigned" ]]; then
-              echo "> **First-open (unsigned build):** macOS Gatekeeper will warn on first launch."
-              echo "> **Right-click the app → Open → confirm once** (only needed the first time)."
-              echo "> Alternatively: \`xattr -dr com.apple.quarantine BleWidget.app\`."
-              echo ">"
-              echo "> **Known limitation:** because this build is unsigned, spec **SC-001/SC-002**"
-              echo "> (zero-warning, under-5-minutes) and **FR-002** (signed + notarized) are **NOT met"
-              echo "> this iteration** — deferred to a signed-release follow-up once a Developer ID is in"
-              echo "> place. Download, run, and live status work today."
+              echo "### First open (unsigned build)"
+              echo
+              echo "Because this build is unsigned, macOS quarantines the download. **Drag BleWidget.app out of the \`.dmg\` and eject the disk image first** — you can't clear the quarantine flag while the app sits on the read-only image. Then handle whichever prompt you get:"
+              echo
+              echo "- **\"BleWidget can't be opened because it is from an unidentified developer\"** → right-click the app → **Open** → confirm once."
+              echo "- **\"BleWidget is damaged and can't be opened. You should eject the disk image.\"** (common on Apple Silicon) → the right-click trick won't work; clear the flag once in Terminal (adjust the path to where you moved the app): \`xattr -cr /Applications/BleWidget.app\`"
+              echo
+              echo "> **Known limitation:** because this build is unsigned, spec **SC-001/SC-002** (zero-warning, under-5-minutes) and **FR-002** (signed + notarized) are **NOT met this iteration** — deferred to a signed-release follow-up once a Developer ID is in place. Download, run, and live status work today."
             else
               echo "> Signed + notarized build — no Gatekeeper workaround needed."
             fi
