@@ -16,5 +16,9 @@
     <string>Reads keyboard layer and modifier status over Bluetooth.</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <key>KBPSupportedVersions</key>
+    <array>
+        <string>AA440AA0-F5ED-4C48-84A1-8062D20D3D55</string>
+    </array>
 </dict>
 </plist>

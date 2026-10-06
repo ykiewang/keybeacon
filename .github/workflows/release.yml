@@ -1,0 +1,139 @@
+name: release
+
+# Build a downloadable macOS artifact on tag `app-vX.Y.Z` (US1 / FR-001).
+#
+# Fail-safe ordering (contract release-artifact.md §2): build → test → assemble →
+# [sign + notarize, CONDITIONAL] → checksum → publish. Any gated step failing means
+# NO Release is published (Principle V; covers the "signing/notarization outage or
+# cert expiry" edge case).
+#
+# Signing/notarization is INERT this iteration: the steps run ONLY when the
+# ZMK-Studio-aligned Developer ID secrets are present. With no secrets the artifact
+# is published UNSIGNED (signing_state=unsigned) and the first-open workaround is in
+# the notes/README. SC-001/SC-002/FR-002 are explicitly NOT met this iteration.
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version & signing state from tag/secrets
+        id: meta
+        run: |
+          tag="${GITHUB_REF_NAME}"              # e.g. app-v0.1.0
+          ver="${tag#app-v}"
+          echo "tag=$tag"             >> "$GITHUB_OUTPUT"
+          echo "app_version=$ver"     >> "$GITHUB_OUTPUT"
+          if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            echo "signing_state=signed" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing_state=unsigned" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build & test (gate — tests must pass)
+        run: |
+          cd app/macos
+          swift build -c release
+          swift test
+
+      # ---- Signing prep: import Developer ID cert into a temp keychain (CONDITIONAL) ----
+      - name: Import Developer ID certificate (skipped when no secrets)
+        if: ${{ env.APPLE_SIGNING_IDENTITY != '' && env.APPLE_CERTIFICATE != '' }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KP="$(openssl rand -base64 24)"
+          security create-keychain -p "$KP" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KP" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Assemble bundle (gate — must assemble; codesigns iff identity present)
+        run: |
+          ./packaging/make-app.sh "${{ steps.meta.outputs.app_version }}"
+
+      # ---- Notarize + staple (CONDITIONAL; fail-safe) ----
+      - name: Notarize & staple (skipped when no secrets)
+        if: ${{ env.APPLE_SIGNING_IDENTITY != '' }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.meta.outputs.app_version }}"
+          cd dist
+          # Submit the .dmg (bundle inside) and WAIT; non-zero result fails the job.
+          xcrun notarytool submit "BleWidget-$VER.dmg" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+            --wait
+          # Staple the ticket onto the app and the dmg, then refresh the zip + checksums.
+          xcrun stapler staple "BleWidget.app"
+          xcrun stapler staple "BleWidget-$VER.dmg"
+          rm -f "BleWidget-$VER.zip"
+          ditto -c -k --keepParent "BleWidget.app" "BleWidget-$VER.zip"
+          shasum -a 256 "BleWidget-$VER.zip" "BleWidget-$VER.dmg" > "BleWidget-$VER.sha256"
+
+      - name: Write release notes
+        id: notes
+        run: |
+          VER="${{ steps.meta.outputs.app_version }}"
+          STATE="${{ steps.meta.outputs.signing_state }}"
+          NOTES="$RUNNER_TEMP/notes.md"
+          {
+            echo "## KeyBeacon (BleWidget) $VER"
+            echo
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| \`app_version\` | $VER |"
+            echo "| \`supported_kbp\` | KBP 1.x — service UUID \`AA440AA0-F5ED-4C48-84A1-8062D20D3D55\` |"
+            echo "| \`min_macos\` | 12.0 |"
+            echo "| \`signing_state\` | $STATE |"
+            echo
+            if [[ "$STATE" == "unsigned" ]]; then
+              echo "> **First-open (unsigned build):** macOS Gatekeeper will warn on first launch."
+              echo "> **Right-click the app → Open → confirm once** (only needed the first time)."
+              echo "> Alternatively: \`xattr -dr com.apple.quarantine BleWidget.app\`."
+              echo ">"
+              echo "> **Known limitation:** because this build is unsigned, spec **SC-001/SC-002**"
+              echo "> (zero-warning, under-5-minutes) and **FR-002** (signed + notarized) are **NOT met"
+              echo "> this iteration** — deferred to a signed-release follow-up once a Developer ID is in"
+              echo "> place. Download, run, and live status work today."
+            else
+              echo "> Signed + notarized build — no Gatekeeper workaround needed."
+            fi
+            echo
+            echo "**Download:** \`BleWidget-$VER.dmg\` (or \`.zip\`); verify with \`BleWidget-$VER.sha256\`."
+            echo
+            echo "_Platform: macOS available now; Windows/Linux planned for the next iteration (feature 004)._"
+          } > "$NOTES"
+          echo "path=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release & upload artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ steps.meta.outputs.app_version }}"
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            --title "KeyBeacon $VER" \
+            --notes-file "${{ steps.notes.outputs.path }}" \
+            "dist/BleWidget-$VER.dmg" \
+            "dist/BleWidget-$VER.zip" \
+            "dist/BleWidget-$VER.sha256"

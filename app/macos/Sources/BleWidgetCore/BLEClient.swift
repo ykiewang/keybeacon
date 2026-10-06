@@ -16,11 +16,16 @@ public protocol BLEClientDelegate: AnyObject {
     func bleClient(_ client: BLEClient, didChangeState state: BLEConnectionState)
     func bleClient(_ client: BLEClient, didChangeActiveKeyboard keyboard: CompatibleKeyboard?)
     func bleClient(_ client: BLEClient, didUpdateCandidates keyboards: [CompatibleKeyboard])
+    /// A KeyBeacon-family keyboard was found whose protocol version this app does
+    /// not support (unknown/newer service UUID). It is NOT connected/parsed; the
+    /// host surfaces a clear "unsupported protocol version" message (FR-014, SC-007).
+    func bleClient(_ client: BLEClient, didDetectUnsupported keyboards: [CompatibleKeyboard])
 }
 
 public extension BLEClientDelegate {
     func bleClient(_ client: BLEClient, didChangeActiveKeyboard keyboard: CompatibleKeyboard?) {}
     func bleClient(_ client: BLEClient, didUpdateCandidates keyboards: [CompatibleKeyboard]) {}
+    func bleClient(_ client: BLEClient, didDetectUnsupported keyboards: [CompatibleKeyboard]) {}
 }
 
 public final class BLEClient: NSObject {
@@ -48,6 +53,7 @@ public final class BLEClient: NSObject {
     // the chosen one is activated in place — no disconnect/reconnect race.
     private var scanQueue: [CBPeripheral] = []
     private var confirmedCompatible: [CBPeripheral] = []
+    private var detectedUnsupported: [CBPeripheral] = []
     private var probeTarget: CBPeripheral?
 
     private var reconnectTimer: Timer?
@@ -84,6 +90,7 @@ public final class BLEClient: NSObject {
             withServices: [Self.hidServiceUUID, Self.serviceUUID]
         )
         releaseConfirmed()
+        detectedUnsupported = []
         guard !potentials.isEmpty else {
             publishCandidates()
             delegate?.bleClient(self, didChangeState: .notConnected)
@@ -114,7 +121,19 @@ public final class BLEClient: NSObject {
         else {
             // Zero compatible → keep retrying; ≥2 compatible and none remembered
             // → await an explicit choice. Release the held probe connections.
+            let onlyUnsupported = confirmedCompatible.isEmpty && !detectedUnsupported.isEmpty
             releaseConfirmed()
+            if onlyUnsupported {
+                let list = detectedUnsupported.map { p in
+                    CompatibleKeyboard(
+                        identifier: p.identifier,
+                        name: p.name,
+                        state: .notConnected,
+                        isCompatible: false
+                    )
+                }
+                delegate?.bleClient(self, didDetectUnsupported: list)
+            }
             delegate?.bleClient(self, didChangeState: .notConnected)
             scheduleReconnect()
             return
@@ -217,7 +236,9 @@ extension BLEClient: CBCentralManagerDelegate {
         _ central: CBCentralManager,
         didConnect peripheral: CBPeripheral
     ) {
-        peripheral.discoverServices([Self.serviceUUID])
+        // Discover ALL services so an unknown KeyBeacon-family service (an
+        // unsupported MAJOR) is visible for classification, not just our own.
+        peripheral.discoverServices(nil)
     }
 
     public func centralManager(
@@ -252,14 +273,20 @@ extension BLEClient: CBPeripheralDelegate {
         didDiscoverServices error: Error?
     ) {
         let discovered = (peripheral.services ?? []).map { $0.uuid }
-        let compatible = CompatibleKeyboard.isCompatible(
-            discoveredServiceUUIDs: discovered
-        )
+        let classification = KBPCompatibility.classify(discoveredServices: discovered)
 
         if probeTarget === peripheral {
-            if compatible {
+            switch classification {
+            case .supported:
                 confirmedCompatible.append(peripheral)  // keep connected
-            } else {
+            case .unsupportedVersion:
+                // KeyBeacon-family but a MAJOR we don't support: remember it so the
+                // host can report "unsupported protocol version"; never parse it.
+                if !detectedUnsupported.contains(where: { $0.identifier == peripheral.identifier }) {
+                    detectedUnsupported.append(peripheral)
+                }
+                central.cancelPeripheralConnection(peripheral)
+            case .notAKeyboard:
                 central.cancelPeripheralConnection(peripheral)
             }
             probeTarget = nil
@@ -268,7 +295,7 @@ extension BLEClient: CBPeripheralDelegate {
         }
 
         guard self.peripheral === peripheral else { return }
-        guard compatible,
+        guard classification == .supported,
               let service = peripheral.services?.first(
                   where: { $0.uuid == Self.serviceUUID }
               )

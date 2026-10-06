@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift build & test (app/macos)
+        run: |
+          cd app/macos
+          swift build
+          swift test
+
+      - name: bundle smoke — assemble unsigned .app/.dmg/.zip (FR-001)
+        run: |
+          ./packaging/make-app.sh ci-smoke
+          test -d dist/BleWidget.app
+          test -f dist/BleWidget-ci-smoke.dmg
+          test -f dist/BleWidget-ci-smoke.zip
+          echo "bundle smoke OK"
+
+      - name: standalone-build assertion — no firmware-repo path (SC-003 / FR-005)
+        run: |
+          if grep -RInE '\.\./\.\./|zmk-config-totem|host/macos' app/macos --include='*.swift' --include='Package.swift'; then
+            echo "ERROR: app references a firmware-repo path — build is not standalone"; exit 1
+          fi
+          echo "OK: app builds with no firmware repo present"

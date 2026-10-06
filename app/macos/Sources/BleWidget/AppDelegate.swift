@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     private var state: BLEConnectionState = .connecting
     private var activeKeyboard: CompatibleKeyboard?
     private var candidates: [CompatibleKeyboard] = []
+    private var unsupportedKeyboards: [CompatibleKeyboard] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -32,12 +33,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     private func buildMenu() {
         let menu = NSMenu()
-        let header = NSMenuItem(
-            title: activeKeyboard?.displayName ?? "未连接键盘",
-            action: nil, keyEquivalent: ""
-        )
+        let headerTitle: String
+        if let active = activeKeyboard {
+            headerTitle = active.displayName
+        } else if !unsupportedKeyboards.isEmpty {
+            headerTitle = "⚠︎ 不受支持的键盘协议版本"
+        } else {
+            headerTitle = "未连接键盘"
+        }
+        let header = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+
+        if activeKeyboard == nil, !unsupportedKeyboards.isEmpty {
+            let names = unsupportedKeyboards.map { $0.displayName }.joined(separator: ", ")
+            let info = NSMenuItem(
+                title: "检测到较新的 KeyBeacon 协议(\(names));请升级本应用后使用。",
+                action: nil, keyEquivalent: ""
+            )
+            info.isEnabled = false
+            menu.addItem(info)
+        }
         menu.addItem(.separator())
 
         let chooser = NSMenuItem(title: "键盘", action: nil, keyEquivalent: "")
@@ -129,12 +145,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     func bleClient(_ client: BLEClient, didChangeActiveKeyboard keyboard: CompatibleKeyboard?) {
         activeKeyboard = keyboard
+        if keyboard != nil { unsupportedKeyboards = [] }
         statusItem.button?.toolTip = keyboard?.displayName
         buildMenu()
     }
 
     func bleClient(_ client: BLEClient, didUpdateCandidates keyboards: [CompatibleKeyboard]) {
         candidates = keyboards
+        if !keyboards.isEmpty { unsupportedKeyboards = [] }
+        buildMenu()
+    }
+
+    func bleClient(_ client: BLEClient, didDetectUnsupported keyboards: [CompatibleKeyboard]) {
+        unsupportedKeyboards = keyboards
+        statusItem.button?.toolTip = "检测到不受支持的 KeyBeacon 协议版本;请升级本应用。"
         buildMenu()
     }
 }

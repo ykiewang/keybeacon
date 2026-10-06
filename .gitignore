@@ -1,0 +1,13 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Build/bundle outputs
+dist/
+*.app
+*.dmg
+*.zip
+
+# macOS
+.DS_Store

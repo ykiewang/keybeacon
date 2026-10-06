@@ -1,0 +1,65 @@
+name: protocol
+
+# Governance for the authoritative KBP standard in protocol/ (contract
+# protocol-standard.md §6). Runs on every push/PR (lint) and on protocol-v* tags
+# (version/tag agreement). Pure text checks — no build, no network.
+
+on:
+  push:
+    paths:
+      - 'protocol/**'
+      - '.github/workflows/protocol.yml'
+    tags:
+      - 'protocol-v*'
+  pull_request:
+    paths:
+      - 'protocol/**'
+      - '.github/workflows/protocol.yml'
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: VERSION is present & valid semver
+        run: |
+          set -euo pipefail
+          test -f protocol/VERSION || { echo "ERROR: protocol/VERSION missing"; exit 1; }
+          ver="$(tr -d ' \t\n\r' < protocol/VERSION)"
+          echo "protocol/VERSION = $ver"
+          if ! echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: '$ver' is not MAJOR.MINOR.PATCH semver"; exit 1
+          fi
+          echo "VER=$ver" >> "$GITHUB_ENV"
+
+      - name: CHANGELOG has an entry for VERSION
+        run: |
+          set -euo pipefail
+          test -f protocol/CHANGELOG.md || { echo "ERROR: protocol/CHANGELOG.md missing"; exit 1; }
+          if ! grep -Eq "(^|[^0-9.])${VER//./\\.}([^0-9.]|$)" protocol/CHANGELOG.md; then
+            echo "ERROR: no CHANGELOG.md entry for version $VER"; exit 1
+          fi
+          echo "OK: CHANGELOG.md documents $VER"
+
+      - name: Self-containment lint (no firmware/app-internal references)
+        run: |
+          set -euo pipefail
+          test -f protocol/README.md || { echo "ERROR: protocol/README.md missing"; exit 1; }
+          # The standard MUST be implementable from protocol/ alone: reject links/paths
+          # that reach into firmware or app internals.
+          if grep -nEi '\]\(\.\./|(^|[^A-Za-z])(host/|config/)|zmk-config-totem|app/macos' protocol/README.md; then
+            echo "ERROR: protocol/README.md references a firmware/app-internal path — not self-contained"
+            exit 1
+          fi
+          echo "OK: protocol/README.md is self-contained"
+
+      - name: Tag matches VERSION (only on protocol-v* tags)
+        if: ${{ startsWith(github.ref, 'refs/tags/protocol-v') }}
+        run: |
+          set -euo pipefail
+          tag_ver="${GITHUB_REF_NAME#protocol-v}"
+          if [[ "$tag_ver" != "$VER" ]]; then
+            echo "ERROR: tag $GITHUB_REF_NAME disagrees with protocol/VERSION ($VER)"; exit 1
+          fi
+          echo "OK: tag $GITHUB_REF_NAME matches protocol/VERSION $VER"
