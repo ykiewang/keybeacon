@@ -8,6 +8,14 @@
 modifier keys** — in a small desktop app, over Bluetooth LE. It works with any keyboard that
 implements the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
 
+## Screenshots
+
+The floating status panel updates live as you switch layers. Here it is across the Totem's layers:
+
+| Base | Navigation | Symbols | Adjust |
+|:---:|:---:|:---:|:---:|
+| ![Base layer](photos/float-window/base-layer.png) | ![Navigation layer](photos/float-window/navi-layer.png) | ![Symbol layer](photos/float-window/sym-layer.png) | ![Adjust layer](photos/float-window/adj-layer.png) |
+
 ## Why KeyBeacon
 
 Many ZMK keyboards — the Totem among them — have **no screen**. You press a layer key and have no
@@ -117,6 +125,14 @@ or app may implement it.
 
 **KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与
 **按住的修饰键**。它适用于任何实现了开放的 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
+
+## 界面预览
+
+悬浮状态面板会随你切换层而实时更新。下面是 Totem 各层下的样子:
+
+| 基础层 | 导航层 | 符号层 | 调节层 |
+|:---:|:---:|:---:|:---:|
+| ![基础层](photos/float-window/base-layer.png) | ![导航层](photos/float-window/navi-layer.png) | ![符号层](photos/float-window/sym-layer.png) | ![调节层](photos/float-window/adj-layer.png) |
 
 ## 初衷与愿景
 
