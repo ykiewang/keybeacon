@@ -102,7 +102,13 @@ Package a distributable bundle locally:
 
 ## For keyboard authors
 
-Make your keyboard work with KeyBeacon and prove it: read [`protocol/README.md`](protocol/README.md)
+**Running ZMK?** You don't need to implement KBP by hand — use the ready-made
+[`zmk-keybeacon`](https://github.com/ykiewang/zmk-keybeacon) Zephyr module. Add it to your
+`config/west.yml` (pinned to a release tag) and set `CONFIG_ZMK_KEYBEACON=y` on the central
+build — no file copying, no `include()`/`rsource`. The two-step setup is documented in the
+module's [GETTING-STARTED.md](https://github.com/ykiewang/zmk-keybeacon/blob/main/GETTING-STARTED.md).
+
+**Any other firmware, or implementing from scratch?** Read [`protocol/README.md`](protocol/README.md)
 (the standard) and [`conformance/CONFORMANCE.md`](conformance/CONFORMANCE.md) (what to implement),
 then run the self-test tool:
 
@@ -212,7 +218,13 @@ swift test                    # 纯逻辑单元测试
 
 ## 面向键盘作者
 
-让你的键盘兼容 KeyBeacon 并加以验证:阅读 [`protocol/README.md`](protocol/README.md)(标准)与
+**用的是 ZMK?** 无需手写实现 KBP —— 直接用现成的
+[`zmk-keybeacon`](https://github.com/ykiewang/zmk-keybeacon) Zephyr 模块:在 `config/west.yml` 中加入
+该模块(锁定到发布 tag),并在 central 构建上设置 `CONFIG_ZMK_KEYBEACON=y` 即可 —— 无需复制文件、无需
+`include()`/`rsource`。两步接入详见模块的
+[GETTING-STARTED.md](https://github.com/ykiewang/zmk-keybeacon/blob/main/GETTING-STARTED.md)。
+
+**其他固件,或从零实现?** 阅读 [`protocol/README.md`](protocol/README.md)(标准)与
 [`conformance/CONFORMANCE.md`](conformance/CONFORMANCE.md)(需要实现什么),然后运行自测工具:
 
 ```bash
