@@ -43,6 +43,30 @@ This repository is the **home of three things**:
 > **Platform status**: macOS is available now. **Windows and Linux are planned for the next
 > iteration** (they are not yet available). The protocol is OS-neutral by design.
 
+## Roadmap
+
+Where KeyBeacon is headed. Each item is a self-contained **KBP MINOR** addition — a new optional BLE
+characteristic — landing across **protocol → firmware → app**, so older apps keep working. The three
+most-requested wins for screenless split keyboards lead the list.
+
+### Planned
+
+| Feature | What you'll see | Target |
+|---------|-----------------|--------|
+| Host link status | connected or not, and which BLE profile (1–5) is active | KBP 1.1 |
+| Per-half link | each split half online / offline — spot a dropped half instantly | KBP 1.1 |
+| Per-half battery | charge % for every half, so you know which one to charge | KBP 1.1 |
+| Active output | whether typing goes to USB or BLE | KBP 1.1 |
+| Typing speed | live words-per-minute | KBP 1.2 |
+
+### Exploring
+
+Caps-Word / host lock LEDs (Caps·Num·Scroll) · full active-layer stack (not just the top layer) ·
+keystroke & session stats · activity (active / idle / sleep) · RGB & backlight state.
+
+*Candidates, not commitments — each ships when it maps to real keyboard state and earns a place on
+the panel. Link-quality (RSSI) and charging state depend on hardware/stack support and come last.*
+
 ## Download & run (macOS)
 
 1. Go to the [Releases](https://github.com/ykiewang/keybeacon/releases) page and download the
@@ -163,6 +187,29 @@ Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操�
 
 > **平台状态**:macOS 现已可用。**Windows 与 Linux 顺延至下一期**(暂不可用)。协议在设计上与
 > 操作系统无关。
+
+## 路线图
+
+KeyBeacon 的下一步走向。下面每一项都是一个自包含的 **KBP MINOR** 增量——新增一个可选的 BLE 特征——贯穿
+**协议 → 固件 → app** 落地,旧版应用会忽略不认识的部分并继续正常工作。面向无屏分体键盘、呼声最高的三项排在最前。
+
+### 计划中
+
+| 功能 | 你会看到 | 目标版本 |
+|------|---------|---------|
+| 主机连接状态 | 是否真的连上、当前在第几个 BLE profile(1–5) | KBP 1.1 |
+| 左右半连接 | 分体每一半在线 / 离线——掉线一眼可见 | KBP 1.1 |
+| 每半电量 | 每一半的电量百分比,知道该充哪半 | KBP 1.1 |
+| 当前输出 | 键击去向 USB 还是 BLE | KBP 1.1 |
+| 打字速度 | 实时每分钟字数(WPM) | KBP 1.2 |
+
+### 探索中
+
+Caps-Word / 主机锁定灯(Caps·Num·Scroll)· 完整激活层栈(不止最高层)·
+击键 / 会话统计 · 活动状态(活跃 / 空闲 / 休眠)· RGB 与背光状态。
+
+*这些是候选项而非承诺——每一项只有在能映射到键盘真实状态、且确实值得占面板一席时才会落地。连接质量(RSSI)
+与充电状态取决于硬件/协议栈支持,排在最后。*
 
 ## 下载即用(macOS)
 
