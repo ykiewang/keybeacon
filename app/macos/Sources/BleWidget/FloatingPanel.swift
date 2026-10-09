@@ -114,6 +114,13 @@ final class FloatingPanel: NSPanel {
     private var stalenessTimer: Timer?
     private var cachedConnectivity: ConnectivityStatus?
 
+    /// Outer vertical stack that holds `topRow`, `connectivityCard` and
+    /// `compactRow` (whichever are currently visible per `displayMode`).
+    /// Held as a property so `applyDisplayMode()` can retune its edgeInsets
+    /// per layout (full: top=0 to anchor the already-tall topRow; compact:
+    /// symmetric top+bottom so the single line is vertically centred).
+    private let vstack = NSStackView()
+
     /// Last known staleness state per field_key — used only to emit a log
     /// line on each live↔stale transition (not for rendering).
     private var lastStaleStates: [String: Bool] = [:]
@@ -218,11 +225,14 @@ final class FloatingPanel: NSPanel {
         buildCompactRow()
 
         // Compose rows into a vertical stack.
-        let vstack = NSStackView(views: [topRow, connectivityCard, compactRow])
+        for v in [topRow, connectivityCard, compactRow] {
+            vstack.addArrangedSubview(v)
+        }
         vstack.orientation = .vertical
         vstack.spacing = 6
         vstack.alignment = .leading
         vstack.translatesAutoresizingMaskIntoConstraints = false
+        // Default to full-mode insets; applyDisplayMode() flips them.
         vstack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
         content.addSubview(vstack)
 
@@ -530,10 +540,17 @@ final class FloatingPanel: NSPanel {
             // connectivityCard visibility is driven by setConnectivityCardVisible();
             // don't override it here.
             compactRow.isHidden = true
+            // topRow is 44 pt tall and centres its own label internally, so a
+            // top inset of 0 is correct (bottom 10 pt matches the card's
+            // comfortable breathing room).
+            vstack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
         case .compact:
             topRow.isHidden = true
             connectivityCard.isHidden = true
             compactRow.isHidden = false
+            // Symmetric vertical padding so the single row is visually
+            // centred inside the rounded content view.
+            vstack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
         }
         // Re-render so the newly-visible layout picks up current data.
         renderConnectivity()
