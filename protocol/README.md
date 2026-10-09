@@ -1,6 +1,10 @@
+<a id="en-kbp"></a>
+
 # KeyBeacon Protocol (KBP)
 
-**Version**: 1.0.0 · **License**: MIT · **Status**: Released standard
+**English** · [中文](#zh-kbp)
+
+**Version**: 1.1.0 · **License**: MIT · **Status**: Released standard
 
 > **What this is**: KeyBeacon is an open, implementation-neutral protocol by which a keyboard
 > reports its **live internal state the host cannot otherwise know** — the active layer and the
@@ -369,11 +373,11 @@ API names may evolve across ZMK releases; the implementation phase (`zmk-keybeac
 
 # KeyBeacon 协议（KBP）— 中文版
 
-**English** · [中文](#zh-kbp)
+[English](#en-kbp) · **中文**
 
 <a id="zh-kbp"></a>
 
-**版本**：1.0.0 · **许可**：MIT · **状态**：已发布标准
+**版本**：1.1.0 · **许可**：MIT · **状态**：已发布标准
 
 > **本文档是什么**：KeyBeacon 是一个开放的、与实现无关的协议。通过该协议，键盘可将**主机无法直接
 > 获知的活跃内部状态**——当前激活的层与按住的修饰键——通过 BLE 上报给桌面应用。本文档是该接口的

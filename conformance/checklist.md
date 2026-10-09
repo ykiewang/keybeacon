@@ -1,4 +1,8 @@
+<a id="en-checklist"></a>
+
 # KBP 1.x conformance checklist
+
+**English** · [中文](#zh-checklist)
 
 Each line is an **individually verifiable** requirement from KeyBeacon Protocol §10 (KBP 1.0) and
 §14 (KBP 1.1). The right column names the automated check in
@@ -64,7 +68,7 @@ when `bleak` is unavailable.
 
 # KBP 1.x 一致性检查清单(中文版)
 
-**English** · [中文](#zh-checklist)
+[English](#en-checklist) · **中文**
 
 每一行都是来自 KeyBeacon 协议 §10（KBP 1.0）与 §14（KBP 1.1）的**可独立验证**的要求。右列标明
 [`conformance_tool.py`](conformance_tool.py) 中覆盖该项的自动检查。每一项的构建指引见

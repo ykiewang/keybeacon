@@ -1,4 +1,8 @@
+<a id="en-conformance"></a>
+
 # Making a keyboard conform to KeyBeacon (KBP)
+
+**English** · [中文](#zh-conformance)
 
 This guide is the **complete, concrete body of work** to make a keyboard work with KeyBeacon and
 to prove it. It is normative for the claim "this keyboard supports KBP". The authoritative wire
@@ -217,7 +221,7 @@ The schema is pinned under `spec_version = "kbp-conformance-cli/1"` in the JSON 
 
 # 让键盘符合 KeyBeacon（KBP）— 中文版
 
-**English** · [中文](#zh-conformance)
+[English](#en-conformance) · **中文**
 
 本指南是使键盘兼容 KeyBeacon 并加以验证的**完整、具体的工作清单**。它对"此键盘支持 KBP"这一声明具有规范性效力。权威的线上合约见 [`../protocol/README.md`](../protocol/README.md)；本文档告诉键盘作者**需要构建什么**，[`checklist.md`](checklist.md) + [`conformance_tool.py`](conformance_tool.py) 告诉他们**如何验证**。
 

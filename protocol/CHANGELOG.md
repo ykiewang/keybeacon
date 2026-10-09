@@ -1,4 +1,8 @@
+<a id="en-changelog"></a>
+
 # KeyBeacon Protocol — Changelog
+
+**English** · [中文](#zh-changelog)
 
 All notable changes to the **KeyBeacon Protocol (KBP)** are recorded here. KBP uses semantic
 versioning; the **service UUID is the MAJOR-version signal** (see `README.md` §9). Each released
@@ -112,7 +116,7 @@ the existing contract; it does not alter bytes on the air.
 
 # KeyBeacon 协议 — 变更日志(中文版)
 
-**English** · [中文](#zh-changelog)
+[English](#en-changelog) · **中文**
 
 **KeyBeacon 协议(KBP)** 的所有重要变更都记录于此。KBP 采用语义化版本;**服务 UUID 即为 MAJOR
 版本信号**(见 `README.md` §9)。每个已发布版本对应本仓库中一个不可变的 `protocol-vX.Y.Z` git
