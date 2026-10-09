@@ -25,6 +25,7 @@ public final class AppSettings {
     private static let migratedKey = "settingsMigratedV2"
     private static let selectedKeyboardKey = "selectedKeyboardIdentifier"
     private static let pinnedCornerKey = "panelPinnedCorner"
+    private static let panelVisibleKey = "panelVisible"
 
     private static let legacyPositionPrefix = "totemPanelFrame"
     private static let legacyLockedKey = "totemPanelLocked"
@@ -33,6 +34,21 @@ public final class AppSettings {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    // MARK: - Panel visibility (nil-default = visible)
+
+    /// Whether the floating panel is shown. Defaults to true for first-run
+    /// users so the panel behaves the same as before. User toggles via the
+    /// menu-bar "显示浮窗" item.
+    public var panelVisible: Bool {
+        get {
+            if defaults.object(forKey: Self.panelVisibleKey) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Self.panelVisibleKey)
+        }
+        set { defaults.set(newValue, forKey: Self.panelVisibleKey) }
     }
 
     // MARK: - Panel lock

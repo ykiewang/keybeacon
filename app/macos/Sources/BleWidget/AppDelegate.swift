@@ -19,7 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         AppSettings().migrateIfNeeded()
 
         panel = FloatingPanel()
-        panel.orderFrontRegardless()
+        if AppSettings().panelVisible {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
 
         statusItem = NSStatusBar.system.statusItem(
             withLength: NSStatusItem.variableLength
@@ -81,6 +85,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         menu.addItem(
             NSMenuItem(title: "重连", action: #selector(reconnect), keyEquivalent: "r")
         )
+
+        // Panel visibility toggle (persisted). Checkmark reflects current state.
+        let showPanelItem = NSMenuItem(
+            title: "显示浮窗",
+            action: #selector(togglePanelVisible), keyEquivalent: ""
+        )
+        showPanelItem.target = self
+        showPanelItem.state = AppSettings().panelVisible ? .on : .off
+        menu.addItem(showPanelItem)
+
         menu.addItem(
             NSMenuItem(
                 title: "锁定 / 穿透",
@@ -150,6 +164,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     @objc private func toggleLock() {
         panel.isLocked.toggle()
+    }
+
+    @objc private func togglePanelVisible() {
+        let settings = AppSettings()
+        let next = !settings.panelVisible
+        settings.panelVisible = next
+        if next {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
+        buildMenu()
     }
 
     @objc private func setPinOff() {
