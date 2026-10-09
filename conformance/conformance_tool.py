@@ -277,6 +277,147 @@ def check_us1_fields(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
 
 
 # -----------------------------------------------------------------------------
+# T031 (US2): split_link (byte[4]) + Battery characteristic (C9) field checks
+# -----------------------------------------------------------------------------
+
+
+def check_us2_split_link(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
+    """Validate split_link (byte[4]); update field_support + C8 sub-check.
+
+    Rules (contracts/protocol-kbp11.md §3 and §7):
+    - cap.has_split_link = 0 → field_support = "unsupported" (no C8 contribution)
+    - cap.has_split_link = 1 while cap.is_split = 0 → FAIL (P-C1 invariant)
+    - split_link reserved bits 2-7 non-zero → WARN (field_support = "malformed")
+    - All other cases → PASS (field_support = "supported")
+    """
+    cap = parsed["capability_bits"]
+    split_link = parsed["split_link"]
+    field_support = extras["field_support"]
+
+    if not cap["has_split_link"]:
+        field_support["split_link"] = "unsupported"
+        return
+
+    if not cap["is_split"]:
+        field_support["split_link"] = "malformed"
+        _record_c8_subcheck(
+            extras,
+            "split_link",
+            "FAIL",
+            "has_split_link = 1 but is_split = 0 (P-C1 violation)",
+        )
+        return
+
+    if split_link["reserved_bits_2_7"] != 0:
+        bits_bin = f"0b{split_link['reserved_bits_2_7']:06b}"
+        field_support["split_link"] = "malformed"
+        _record_c8_subcheck(
+            extras,
+            "split_link",
+            "WARN",
+            f"split_link reserved bits 2-7 non-zero ({bits_bin})",
+        )
+    else:
+        field_support["split_link"] = "supported"
+        _record_c8_subcheck(extras, "split_link", "PASS", None)
+
+
+def check_us2_battery(
+    raw: bytes | None,
+    is_split: bool,
+    chars_present: dict[str, Any],
+    extras: dict[str, Any],
+    report: "Report",
+) -> None:
+    """Evaluate the Battery characteristic (AA440AA3-…) and update C9 +
+    field_support.{overall,left,right}_battery.
+
+    Rules (contracts/protocol-kbp11.md §4 and §7):
+    - characteristic absent → C9 remains SKIP; field_support.*_battery stay "unsupported"
+    - raw None but characteristic present → C9 FAIL
+    - raw length not matching is_split (1 for overall, 2 for split) → C9 FAIL
+    - byte in 101..=254 (reserved) → C9 WARN (field_support = "malformed")
+    - byte == 255 (sentinel) → OK
+    - byte in 0..=100 → OK
+    """
+    field_support = extras["field_support"]
+    battery_present = chars_present.get("AA440AA3", {}).get("present", False)
+
+    if not battery_present:
+        field_support["overall_battery"] = "unsupported"
+        field_support["left_battery"] = "unsupported"
+        field_support["right_battery"] = "unsupported"
+        return
+
+    if raw is None:
+        report.set(
+            "C9",
+            "FAIL",
+            "Battery READ returned no data (characteristic present)",
+        )
+        if is_split:
+            field_support["left_battery"] = "malformed"
+            field_support["right_battery"] = "malformed"
+            field_support["overall_battery"] = "unsupported"
+        else:
+            field_support["overall_battery"] = "malformed"
+            field_support["left_battery"] = "unsupported"
+            field_support["right_battery"] = "unsupported"
+        return
+
+    parsed_batt = parse_battery(bytes(raw), is_split=is_split)
+    if parsed_batt is None:
+        expected = 2 if is_split else 1
+        report.set(
+            "C9",
+            "FAIL",
+            f"Battery payload length {len(raw)} != {expected} (is_split={is_split})",
+        )
+        if is_split:
+            field_support["left_battery"] = "malformed"
+            field_support["right_battery"] = "malformed"
+            field_support["overall_battery"] = "unsupported"
+        else:
+            field_support["overall_battery"] = "malformed"
+            field_support["left_battery"] = "unsupported"
+            field_support["right_battery"] = "unsupported"
+        return
+
+    extras["battery_parsed"] = parsed_batt
+    issues_warn: list[str] = []
+
+    if is_split:
+        for side_key, reading in (
+            ("left_battery", parsed_batt["left"]),
+            ("right_battery", parsed_batt["right"]),
+        ):
+            if reading.get("out_of_range"):
+                issues_warn.append(
+                    f"{side_key} raw=0x{reading['raw']:02X} in reserved range 101-254"
+                )
+                field_support[side_key] = "malformed"
+            else:
+                field_support[side_key] = "supported"
+        field_support["overall_battery"] = "unsupported"
+    else:
+        reading = parsed_batt["overall"]
+        if reading.get("out_of_range"):
+            issues_warn.append(
+                f"overall_battery raw=0x{reading['raw']:02X} in reserved range 101-254"
+            )
+            field_support["overall_battery"] = "malformed"
+        else:
+            field_support["overall_battery"] = "supported"
+        field_support["left_battery"] = "unsupported"
+        field_support["right_battery"] = "unsupported"
+
+    if issues_warn:
+        report.set("C9", "WARN", " | ".join(issues_warn))
+    else:
+        report.set("C9", "PASS", None)
+
+
+# -----------------------------------------------------------------------------
 # Report model
 # -----------------------------------------------------------------------------
 
@@ -608,6 +749,16 @@ async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[s
                 parsed = extras.get("connectivity_parsed")
                 if parsed is not None:
                     check_us1_fields(parsed, extras)
+                    check_us2_split_link(parsed, extras)
+                    is_split = bool(parsed["capability_bits"]["is_split"])
+                    battery_raw = await _read_battery_raw(client, extras)
+                    check_us2_battery(
+                        battery_raw,
+                        is_split,
+                        extras["characteristics_present"],
+                        extras,
+                        report,
+                    )
                 _finalise_c8(extras, report)
 
             # Foundational-phase: C1-C6 and C7-C12 are left as SKIP with a note
@@ -656,6 +807,26 @@ async def _populate_capability_bits(client, extras: dict[str, Any]) -> None:
         "has_left_charging": bits["has_left_charging"],
         "has_right_charging": bits["has_right_charging"],
     }
+
+
+async def _read_battery_raw(client, extras: dict[str, Any]) -> bytes | None:
+    """READ the Battery characteristic once; return raw bytes or None.
+
+    Only called when AA440AA3-… is present. Errors are non-fatal: the caller
+    (check_us2_battery) reports them against C9. Raw bytes are stashed in
+    extras["battery_raw_hex"] for the JSON output.
+    """
+    chars_present = extras.get("characteristics_present", {})
+    if not chars_present.get("AA440AA3", {}).get("present", False):
+        return None
+    try:
+        raw = await client.read_gatt_char(CHAR_BATTERY_UUID)
+    except Exception as exc:  # noqa: BLE001 — any BLE failure here is non-fatal
+        extras["battery_read_error"] = str(exc)
+        return None
+    raw_bytes = bytes(raw)
+    extras["battery_raw_hex"] = raw_bytes.hex()
+    return raw_bytes
 
 
 def _choose_candidate(devices: list, device_filter: str | None):

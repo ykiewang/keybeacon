@@ -41,11 +41,45 @@ final class FloatingPanel: NSPanel {
     private let profileRow = NSStackView()
     private var profileBadges: [ProfileBadgeView] = []
 
+    private let splitLeftDot = FloatingPanel.makeDot(diameter: 9)
+    private let splitLeftLabel = NSTextField(labelWithString: "左 —")
+    private let splitRightDot = FloatingPanel.makeDot(diameter: 9)
+    private let splitRightLabel = NSTextField(labelWithString: "右 —")
+    private let splitStaleLabel = NSTextField(labelWithString: "")
+    private let splitRow = NSStackView()
+
+    private let batteryCaption = NSTextField(labelWithString: "电量")
+    private let batteryBarsStack = NSStackView()
+    private let batteryStaleLabel = NSTextField(labelWithString: "")
+    private let batteryRow = NSStackView()
+    private var batteryOverallBar: BatteryBarView?
+    private var batteryLeftBar: BatteryBarView?
+    private var batteryRightBar: BatteryBarView?
+    private var cachedBatteryStatus: BatteryStatus?
+    private var cachedLeftReading: BatteryStatus.BatteryReading?
+    private var cachedLeftReadingAt: TimeInterval?
+    private var cachedRightReading: BatteryStatus.BatteryReading?
+    private var cachedRightReadingAt: TimeInterval?
+    private var cachedOverallReading: BatteryStatus.BatteryReading?
+    private var cachedOverallReadingAt: TimeInterval?
+
     private let staleness = StalenessTracker()
     private var stalenessTimer: Timer?
     private var cachedConnectivity: ConnectivityStatus?
 
     private let baseContentHeight: CGFloat = 44
+
+    private static func makeDot(diameter: CGFloat) -> NSView {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.cornerRadius = diameter / 2
+        v.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            v.widthAnchor.constraint(equalToConstant: diameter),
+            v.heightAnchor.constraint(equalToConstant: diameter),
+        ])
+        return v
+    }
 
     var isLocked: Bool {
         get { settings.locked }
@@ -190,7 +224,14 @@ final class FloatingPanel: NSPanel {
         hostRow.isHidden = true
         profileRow.isHidden = true
 
-        let cardStack = NSStackView(views: [connectivityCardTitle, hostRow, profileRow])
+        buildSplitRow()
+        buildBatteryRow()
+        splitRow.isHidden = true
+        batteryRow.isHidden = true
+
+        let cardStack = NSStackView(views: [
+            connectivityCardTitle, hostRow, profileRow, splitRow, batteryRow,
+        ])
         cardStack.orientation = .vertical
         cardStack.alignment = .leading
         cardStack.spacing = 4
@@ -204,9 +245,70 @@ final class FloatingPanel: NSPanel {
             cardStack.bottomAnchor.constraint(equalTo: connectivityCard.bottomAnchor, constant: -6),
             hostRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
             profileRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
+            splitRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
+            batteryRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
         ])
 
         connectivityCard.isHidden = true
+    }
+
+    private func buildSplitRow() {
+        splitLeftLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        splitLeftLabel.textColor = .white
+        splitLeftLabel.translatesAutoresizingMaskIntoConstraints = false
+        splitRightLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        splitRightLabel.textColor = .white
+        splitRightLabel.translatesAutoresizingMaskIntoConstraints = false
+        splitStaleLabel.font = .systemFont(ofSize: 10)
+        splitStaleLabel.textColor = NSColor.white.withAlphaComponent(0.6)
+        splitStaleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let leftSide = NSStackView(views: [splitLeftDot, splitLeftLabel])
+        leftSide.orientation = .horizontal
+        leftSide.spacing = 4
+        leftSide.alignment = .centerY
+        leftSide.translatesAutoresizingMaskIntoConstraints = false
+
+        let rightSide = NSStackView(views: [splitRightDot, splitRightLabel])
+        rightSide.orientation = .horizontal
+        rightSide.spacing = 4
+        rightSide.alignment = .centerY
+        rightSide.translatesAutoresizingMaskIntoConstraints = false
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        splitRow.orientation = .horizontal
+        splitRow.spacing = 12
+        splitRow.alignment = .centerY
+        splitRow.translatesAutoresizingMaskIntoConstraints = false
+        splitRow.addArrangedSubview(leftSide)
+        splitRow.addArrangedSubview(rightSide)
+        splitRow.addArrangedSubview(spacer)
+        splitRow.addArrangedSubview(splitStaleLabel)
+    }
+
+    private func buildBatteryRow() {
+        batteryCaption.font = .systemFont(ofSize: 11, weight: .regular)
+        batteryCaption.textColor = NSColor.white.withAlphaComponent(0.72)
+        batteryCaption.translatesAutoresizingMaskIntoConstraints = false
+        batteryBarsStack.orientation = .horizontal
+        batteryBarsStack.spacing = 8
+        batteryBarsStack.alignment = .centerY
+        batteryBarsStack.translatesAutoresizingMaskIntoConstraints = false
+        batteryStaleLabel.font = .systemFont(ofSize: 10)
+        batteryStaleLabel.textColor = NSColor.white.withAlphaComponent(0.6)
+        batteryStaleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        batteryRow.orientation = .horizontal
+        batteryRow.spacing = 8
+        batteryRow.alignment = .centerY
+        batteryRow.translatesAutoresizingMaskIntoConstraints = false
+        batteryRow.addArrangedSubview(batteryCaption)
+        batteryRow.addArrangedSubview(batteryBarsStack)
+        batteryRow.addArrangedSubview(spacer)
+        batteryRow.addArrangedSubview(batteryStaleLabel)
     }
 
     // MARK: - KBP 1.1 card visibility (invariant IV-X1 / U-5)
@@ -223,6 +325,15 @@ final class FloatingPanel: NSPanel {
             staleness.reset()
             hostRow.isHidden = true
             profileRow.isHidden = true
+            splitRow.isHidden = true
+            batteryRow.isHidden = true
+            cachedBatteryStatus = nil
+            cachedOverallReading = nil
+            cachedOverallReadingAt = nil
+            cachedLeftReading = nil
+            cachedLeftReadingAt = nil
+            cachedRightReading = nil
+            cachedRightReadingAt = nil
         }
         reflowFrameToContent()
     }
@@ -238,6 +349,28 @@ final class FloatingPanel: NSPanel {
         if status.capability.hasProfile {
             staleness.recordNotify(fieldKey: "profile", at: now)
         }
+        if status.capability.isSplit, status.capability.hasSplitLink {
+            staleness.recordNotify(fieldKey: "split_link", at: now)
+        }
+        renderConnectivity()
+    }
+
+    func update(battery status: BatteryStatus) {
+        cachedBatteryStatus = status
+        let now = CFAbsoluteTimeGetCurrent()
+        switch status.kind {
+        case .overall(let reading):
+            cachedOverallReading = reading
+            cachedOverallReadingAt = now
+            staleness.recordNotify(fieldKey: "overall_battery", at: now)
+        case .split(let left, let right):
+            cachedLeftReading = left
+            cachedLeftReadingAt = now
+            cachedRightReading = right
+            cachedRightReadingAt = now
+            staleness.recordNotify(fieldKey: "left_battery", at: now)
+            staleness.recordNotify(fieldKey: "right_battery", at: now)
+        }
         renderConnectivity()
     }
 
@@ -251,11 +384,15 @@ final class FloatingPanel: NSPanel {
         guard let s = cachedConnectivity else {
             hostRow.isHidden = true
             profileRow.isHidden = true
+            splitRow.isHidden = true
+            batteryRow.isHidden = true
             reflowFrameToContent()
             return
         }
         renderHostRow(status: s, now: now)
         renderProfileRow(status: s, now: now)
+        renderSplitRow(status: s, now: now)
+        renderBatteryRow(status: s, now: now)
         reflowFrameToContent()
     }
 
@@ -330,6 +467,138 @@ final class FloatingPanel: NSPanel {
         profileBadges = (0..<count).map { _ in ProfileBadgeView() }
         for badge in profileBadges {
             profileSlotStack.addArrangedSubview(badge)
+        }
+    }
+
+    private func renderSplitRow(status s: ConnectivityStatus, now: TimeInterval) {
+        guard s.capability.isSplit, s.capability.hasSplitLink else {
+            splitRow.isHidden = true
+            return
+        }
+        splitRow.isHidden = false
+        let leftOnline = s.splitFlags.leftOnline
+        let rightOnline = s.splitFlags.rightOnline
+        splitLeftDot.layer?.backgroundColor =
+            (leftOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
+        splitRightDot.layer?.backgroundColor =
+            (rightOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
+        splitLeftLabel.stringValue = leftOnline ? "左 在线" : "左 离线"
+        splitRightLabel.stringValue = rightOnline ? "右 在线" : "右 离线"
+
+        let isStale = staleness.isStale(fieldKey: "split_link", now: now)
+        let alpha: CGFloat = isStale ? 0.5 : 1.0
+        splitLeftDot.alphaValue = alpha
+        splitRightDot.alphaValue = alpha
+        splitLeftLabel.alphaValue = alpha
+        splitRightLabel.alphaValue = alpha
+        if isStale, let last = staleness.lastNotifyAt(fieldKey: "split_link") {
+            splitStaleLabel.isHidden = false
+            splitStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
+        } else {
+            splitStaleLabel.isHidden = true
+            splitStaleLabel.stringValue = ""
+        }
+    }
+
+    private func renderBatteryRow(status s: ConnectivityStatus, now: TimeInterval) {
+        let isSplit = s.capability.isSplit
+        guard cachedBatteryStatus != nil
+                || cachedOverallReading != nil
+                || cachedLeftReading != nil
+                || cachedRightReading != nil
+        else {
+            batteryRow.isHidden = true
+            return
+        }
+        batteryRow.isHidden = false
+        if isSplit {
+            installSplitBars()
+            let leftOnline = s.capability.hasSplitLink ? s.splitFlags.leftOnline : true
+            let rightOnline = s.capability.hasSplitLink ? s.splitFlags.rightOnline : true
+            if let left = batteryLeftBar {
+                left.sideLabel.stringValue = "L"
+                left.sideLabel.isHidden = false
+                let frozen = !leftOnline
+                left.apply(
+                    reading: cachedLeftReading ?? .unavailable(rawByte: 255, outOfRange: false),
+                    frozenAt: frozen ? cachedLeftReadingAt : nil,
+                    now: now
+                )
+            }
+            if let right = batteryRightBar {
+                right.sideLabel.stringValue = "R"
+                right.sideLabel.isHidden = false
+                let frozen = !rightOnline
+                right.apply(
+                    reading: cachedRightReading ?? .unavailable(rawByte: 255, outOfRange: false),
+                    frozenAt: frozen ? cachedRightReadingAt : nil,
+                    now: now
+                )
+            }
+            let leftStale = staleness.isStale(fieldKey: "left_battery", now: now)
+            let rightStale = staleness.isStale(fieldKey: "right_battery", now: now)
+            let anyStale = leftStale || rightStale
+            batteryCaption.alphaValue = anyStale ? 0.5 : 1.0
+            if anyStale {
+                let lastLeft = staleness.lastNotifyAt(fieldKey: "left_battery")
+                let lastRight = staleness.lastNotifyAt(fieldKey: "right_battery")
+                let latest = [lastLeft, lastRight].compactMap { $0 }.max()
+                if let last = latest {
+                    batteryStaleLabel.isHidden = false
+                    batteryStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
+                } else {
+                    batteryStaleLabel.isHidden = true
+                }
+            } else {
+                batteryStaleLabel.isHidden = true
+                batteryStaleLabel.stringValue = ""
+            }
+        } else {
+            installOverallBar()
+            if let overall = batteryOverallBar {
+                overall.sideLabel.isHidden = true
+                overall.apply(
+                    reading: cachedOverallReading ?? .unavailable(rawByte: 255, outOfRange: false),
+                    frozenAt: nil,
+                    now: now
+                )
+            }
+            let isStale = staleness.isStale(fieldKey: "overall_battery", now: now)
+            batteryCaption.alphaValue = isStale ? 0.5 : 1.0
+            if isStale, let last = staleness.lastNotifyAt(fieldKey: "overall_battery") {
+                batteryStaleLabel.isHidden = false
+                batteryStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
+            } else {
+                batteryStaleLabel.isHidden = true
+                batteryStaleLabel.stringValue = ""
+            }
+        }
+    }
+
+    private func installOverallBar() {
+        batteryLeftBar?.removeFromSuperview()
+        batteryLeftBar = nil
+        batteryRightBar?.removeFromSuperview()
+        batteryRightBar = nil
+        if batteryOverallBar == nil {
+            let bar = BatteryBarView(trackWidth: 140)
+            batteryBarsStack.addArrangedSubview(bar)
+            batteryOverallBar = bar
+        }
+    }
+
+    private func installSplitBars() {
+        batteryOverallBar?.removeFromSuperview()
+        batteryOverallBar = nil
+        if batteryLeftBar == nil {
+            let bar = BatteryBarView(trackWidth: 60)
+            batteryBarsStack.addArrangedSubview(bar)
+            batteryLeftBar = bar
+        }
+        if batteryRightBar == nil {
+            let bar = BatteryBarView(trackWidth: 60)
+            batteryBarsStack.addArrangedSubview(bar)
+            batteryRightBar = bar
         }
     }
 
@@ -523,4 +792,109 @@ fileprivate final class ProfileBadgeView: NSView {
         dashedLayer?.removeFromSuperlayer()
         dashedLayer = nil
     }
+}
+
+fileprivate final class BatteryBarView: NSView {
+    let sideLabel = NSTextField(labelWithString: "")
+    private let percentLabel = NSTextField(labelWithString: "—")
+    private let track = NSView()
+    private let fill = NSView()
+    private var fillWidthConstraint: NSLayoutConstraint!
+    private let trackWidth: CGFloat
+    private let trackHeight: CGFloat = 6
+
+    init(trackWidth: CGFloat) {
+        self.trackWidth = trackWidth
+        super.init(frame: .zero)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+
+        sideLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        sideLabel.textColor = NSColor.white.withAlphaComponent(0.7)
+        sideLabel.translatesAutoresizingMaskIntoConstraints = false
+        sideLabel.isHidden = true
+        addSubview(sideLabel)
+
+        track.wantsLayer = true
+        track.layer?.cornerRadius = trackHeight / 2
+        track.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        track.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(track)
+
+        fill.wantsLayer = true
+        fill.layer?.cornerRadius = trackHeight / 2
+        fill.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        fill.translatesAutoresizingMaskIntoConstraints = false
+        track.addSubview(fill)
+
+        percentLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        percentLabel.textColor = .white
+        percentLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(percentLabel)
+
+        fillWidthConstraint = fill.widthAnchor.constraint(equalToConstant: 0)
+
+        NSLayoutConstraint.activate([
+            sideLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            sideLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            track.leadingAnchor.constraint(equalTo: sideLabel.trailingAnchor, constant: 4),
+            track.centerYAnchor.constraint(equalTo: centerYAnchor),
+            track.widthAnchor.constraint(equalToConstant: trackWidth),
+            track.heightAnchor.constraint(equalToConstant: trackHeight),
+            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
+            fill.topAnchor.constraint(equalTo: track.topAnchor),
+            fill.bottomAnchor.constraint(equalTo: track.bottomAnchor),
+            fillWidthConstraint,
+            percentLabel.leadingAnchor.constraint(equalTo: track.trailingAnchor, constant: 6),
+            percentLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            percentLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            heightAnchor.constraint(equalToConstant: 18),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func apply(
+        reading: BatteryStatus.BatteryReading,
+        frozenAt: TimeInterval?,
+        now: TimeInterval
+    ) {
+        switch reading {
+        case .percent(let n):
+            let clamped = max(0, min(100, Int(n)))
+            fillWidthConstraint.constant = trackWidth * CGFloat(clamped) / 100.0
+            fill.layer?.backgroundColor = Self.colorForPercent(clamped).cgColor
+            fill.isHidden = false
+            if let frozen = frozenAt {
+                let stamp = BatteryBarView.timeFormatter.string(
+                    from: Date().addingTimeInterval(-(max(0, now - frozen)))
+                )
+                percentLabel.stringValue = "\(clamped)% · \(stamp)"
+                percentLabel.alphaValue = 0.65
+            } else {
+                percentLabel.stringValue = "\(clamped)%"
+                percentLabel.alphaValue = 1.0
+            }
+        case .unavailable:
+            fillWidthConstraint.constant = 0
+            fill.isHidden = true
+            percentLabel.stringValue = "读取失败"
+            percentLabel.alphaValue = 1.0
+        }
+    }
+
+    private static func colorForPercent(_ n: Int) -> NSColor {
+        switch n {
+        case ..<20: return .systemRed
+        case ..<40: return .systemOrange
+        default:    return .systemGreen
+        }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 }

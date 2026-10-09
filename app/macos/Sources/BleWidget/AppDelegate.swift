@@ -178,7 +178,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     }
 
     func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {
-        // Row contents are rendered by US-phase task T030. Foundational only wires.
-        _ = status
+        panel.update(battery: status)
     }
 }
