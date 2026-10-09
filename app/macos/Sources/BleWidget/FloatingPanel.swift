@@ -220,21 +220,25 @@ final class FloatingPanel: NSPanel {
         // Row 2 — Connectivity & Power card (hidden by default).
         buildConnectivityCard()
 
-        // Alternative single-row (compact) layout. Hidden unless displayMode
-        // == .compact; see applyDisplayMode().
+        // Alternative single-row (compact) layout. Added separately below
+        // (not as a vstack arrangedSubview) so it can be vertically centred
+        // inside `content` independently of the full-mode vstack. (NSStackView
+        // with distribution .gravityAreas pins a lone arranged subview to
+        // the top edge even with symmetric edgeInsets.)
         buildCompactRow()
 
-        // Compose rows into a vertical stack.
-        for v in [topRow, connectivityCard, compactRow] {
+        // Compose full-mode rows into a vertical stack. compactRow is NOT
+        // part of this stack; see note above.
+        for v in [topRow, connectivityCard] {
             vstack.addArrangedSubview(v)
         }
         vstack.orientation = .vertical
         vstack.spacing = 6
         vstack.alignment = .leading
         vstack.translatesAutoresizingMaskIntoConstraints = false
-        // Default to full-mode insets; applyDisplayMode() flips them.
         vstack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
         content.addSubview(vstack)
+        content.addSubview(compactRow)
 
         NSLayoutConstraint.activate([
             vstack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -243,8 +247,11 @@ final class FloatingPanel: NSPanel {
             vstack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             connectivityCard.leadingAnchor.constraint(equalTo: vstack.leadingAnchor, constant: 10),
             connectivityCard.trailingAnchor.constraint(equalTo: vstack.trailingAnchor, constant: -10),
-            compactRow.leadingAnchor.constraint(equalTo: vstack.leadingAnchor, constant: 10),
-            compactRow.trailingAnchor.constraint(lessThanOrEqualTo: vstack.trailingAnchor, constant: -10),
+            // compactRow: horizontally pinned to content with 10 pt insets,
+            // vertically centred so a single-line chip reads balanced.
+            compactRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
+            compactRow.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -10),
+            compactRow.centerYAnchor.constraint(equalTo: content.centerYAnchor),
         ])
 
         contentView = content
@@ -540,17 +547,10 @@ final class FloatingPanel: NSPanel {
             // connectivityCard visibility is driven by setConnectivityCardVisible();
             // don't override it here.
             compactRow.isHidden = true
-            // topRow is 44 pt tall and centres its own label internally, so a
-            // top inset of 0 is correct (bottom 10 pt matches the card's
-            // comfortable breathing room).
-            vstack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
         case .compact:
             topRow.isHidden = true
             connectivityCard.isHidden = true
             compactRow.isHidden = false
-            // Symmetric vertical padding so the single row is visually
-            // centred inside the rounded content view.
-            vstack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
         }
         // Re-render so the newly-visible layout picks up current data.
         renderConnectivity()
