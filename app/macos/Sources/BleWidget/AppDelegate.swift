@@ -140,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         updateMenuBarIcon()
         if newState != .connected {
             panel.update(.disconnected)
+            panel.markConnectivityStaleOnDisconnect()
         }
     }
 
@@ -173,9 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     }
 
     func bleClient(_ client: BLEClient, didUpdateConnectivity status: ConnectivityStatus) {
-        // Row contents are rendered by US-phase tasks (T023/T024/T029/T030/T034/T038).
-        // The Foundational phase only wires up the delivery path.
-        _ = status
+        panel.update(connectivity: status)
     }
 
     func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {

@@ -173,6 +173,110 @@ def _battery_reading(byte: int) -> dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# C8 sub-check accumulator (one entry per capability group; aggregated at end)
+# -----------------------------------------------------------------------------
+
+
+def _record_c8_subcheck(
+    extras: dict[str, Any],
+    group_key: str,
+    status: str,
+    detail: str | None = None,
+) -> None:
+    """Record a per-capability sub-result for C8.
+
+    US1 (T025) populates host_state + profile; US2/US3/US4 add split_link,
+    output_endpoint, charging_flags. The final C8 status is computed by
+    _finalise_c8 after all US-phase check functions have run.
+    """
+    bucket = extras.setdefault("c8_evaluations", {})
+    bucket[group_key] = {"status": status, "detail": detail}
+
+
+def _finalise_c8(extras: dict[str, Any], report: "Report") -> None:
+    """Aggregate C8 sub-evaluations into a single checklist entry.
+
+    Precedence: FAIL > WARN > PASS > SKIP. SKIP (empty bucket) is left as-is
+    so _mark_skip_with_us_phase_notes can supply the fallback message.
+    """
+    bucket = extras.get("c8_evaluations", {})
+    if not bucket:
+        return
+    statuses = [v["status"] for v in bucket.values()]
+    details = [f"{k}: {v['detail']}" for k, v in bucket.items() if v["detail"]]
+    if any(s == "FAIL" for s in statuses):
+        final = "FAIL"
+    elif any(s == "WARN" for s in statuses):
+        final = "WARN"
+    elif any(s == "PASS" for s in statuses):
+        final = "PASS"
+    else:
+        final = "SKIP"
+    report.set("C8", final, " | ".join(details) if details else None)
+
+
+# -----------------------------------------------------------------------------
+# T025 (US1): host_state + profile field checks
+# -----------------------------------------------------------------------------
+
+
+def check_us1_fields(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
+    """Validate host_state (byte[1]) and profile (bytes[2..3]) fields; update
+    field_support entries and C8 sub-checks.
+
+    Rules (contracts/protocol-kbp11.md §3 and §7):
+    - host_state bits 3-7 are reserved; non-zero → WARN (field_support=malformed)
+    - profile.max_slots == 0 while has_profile = 1 → FAIL
+    - profile.index > profile.max_slots → FAIL (P-C invariant)
+    - capability_bit = 0 → field_support = "unsupported", no C8 contribution
+    """
+    cap = parsed["capability_bits"]
+    host = parsed["host_state"]
+    profile = parsed["profile"]
+    field_support = extras["field_support"]
+
+    if not cap["has_host_connection"]:
+        field_support["host_connection"] = "unsupported"
+    elif host["reserved_bits_3_7"] != 0:
+        bits_bin = f"0b{host['reserved_bits_3_7']:05b}"
+        field_support["host_connection"] = "malformed"
+        _record_c8_subcheck(
+            extras,
+            "host_state",
+            "WARN",
+            f"host_state reserved bits 3-7 non-zero ({bits_bin})",
+        )
+    else:
+        field_support["host_connection"] = "supported"
+        _record_c8_subcheck(extras, "host_state", "PASS", None)
+
+    if not cap["has_profile"]:
+        field_support["profile"] = "unsupported"
+    else:
+        idx = profile["index"]
+        max_slots = profile["max_slots"]
+        if max_slots == 0:
+            field_support["profile"] = "malformed"
+            _record_c8_subcheck(
+                extras,
+                "profile",
+                "FAIL",
+                "profile.max_slots == 0 but has_profile = 1",
+            )
+        elif idx > max_slots:
+            field_support["profile"] = "malformed"
+            _record_c8_subcheck(
+                extras,
+                "profile",
+                "FAIL",
+                f"profile.index ({idx}) > profile.max_slots ({max_slots})",
+            )
+        else:
+            field_support["profile"] = "supported"
+            _record_c8_subcheck(extras, "profile", "PASS", None)
+
+
+# -----------------------------------------------------------------------------
 # Report model
 # -----------------------------------------------------------------------------
 
@@ -501,6 +605,10 @@ async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[s
             # until the US-phase tasks implement them.
             if declared_minor == "1.1":
                 await _populate_capability_bits(client, extras)
+                parsed = extras.get("connectivity_parsed")
+                if parsed is not None:
+                    check_us1_fields(parsed, extras)
+                _finalise_c8(extras, report)
 
             # Foundational-phase: C1-C6 and C7-C12 are left as SKIP with a note
             # pointing at the US-phase tasks that will fill them in. The
@@ -536,6 +644,7 @@ async def _populate_capability_bits(client, extras: dict[str, Any]) -> None:
             f"Connectivity payload shorter than 7 bytes ({len(raw)} bytes)"
         )
         return
+    extras["connectivity_parsed"] = parsed
     bits = parsed["capability_bits"]
     extras["capability_bits"] = {
         "raw": f"0x{bits['raw']:02X}",
@@ -616,7 +725,14 @@ def _mark_skip_with_us_phase_notes(report: Report) -> None:
         "C12": ("MANUAL", "verify in firmware: 1.1 characteristics only in central image"),
     }
     for item_id, (status, note) in us_notes.items():
-        report.set(item_id, status, note)
+        current = report.results.get(item_id)
+        if current is None:
+            continue
+        # Only overwrite items still in their default pre-check state. Any
+        # entry already set by a US-phase check function (e.g. check_us1_fields
+        # updating C8 via _finalise_c8) is preserved.
+        if current.status == "SKIP" and current.detail == "not evaluated":
+            report.set(item_id, status, note)
 
 
 # -----------------------------------------------------------------------------
