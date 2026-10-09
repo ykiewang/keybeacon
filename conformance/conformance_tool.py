@@ -418,6 +418,104 @@ def check_us2_battery(
 
 
 # -----------------------------------------------------------------------------
+# T035 (US3): output_endpoint (byte[5]) field check
+# -----------------------------------------------------------------------------
+
+
+def check_us3_output_endpoint(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
+    """Validate output_endpoint (byte[5]); update field_support + C8 sub-check.
+
+    Rules (contracts/protocol-kbp11.md §3 and §7):
+    - cap.has_output_endpoint = 0 → field_support = "unsupported"
+    - endpoint_byte in {0, 1, 2} → PASS (unknown / USB / BLE)
+    - endpoint_byte >= 3 → WARN (reserved / non-canonical code; not FAIL per contract)
+    """
+    cap = parsed["capability_bits"]
+    endpoint = parsed["output_endpoint"]
+    field_support = extras["field_support"]
+
+    if not cap["has_output_endpoint"]:
+        field_support["output_endpoint"] = "unsupported"
+        return
+
+    code = endpoint["code"]
+    if code in (0, 1, 2):
+        field_support["output_endpoint"] = "supported"
+        _record_c8_subcheck(extras, "output_endpoint", "PASS", None)
+    else:
+        field_support["output_endpoint"] = "malformed"
+        _record_c8_subcheck(
+            extras,
+            "output_endpoint",
+            "WARN",
+            f"non-canonical endpoint code: 0x{code:02X}",
+        )
+
+
+# -----------------------------------------------------------------------------
+# T039 (US4): charging_flags (byte[6]) field check
+# -----------------------------------------------------------------------------
+
+
+def check_us4_charging(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
+    """Validate charging_flags (byte[6]); update field_support + C8 sub-check.
+
+    Rules (contracts/protocol-kbp11.md §3 and §7):
+    - cap.has_right_charging = 1 while cap.is_split = 0 → FAIL (P-C5 violation)
+    - cap.has_left_charging = 0 but byte[6] bit 0 non-zero → WARN
+    - cap.has_right_charging = 0 but byte[6] bit 1 non-zero → WARN
+    - charging_flags reserved bits 2-7 non-zero → WARN
+    - field_support.left_charging / right_charging populated independently
+    - charging is a state field: C11 throttling rules do not apply
+    """
+    cap = parsed["capability_bits"]
+    charging = parsed["charging_flags"]
+    field_support = extras["field_support"]
+
+    issues_fail: list[str] = []
+    issues_warn: list[str] = []
+
+    if cap["has_right_charging"] and not cap["is_split"]:
+        issues_fail.append("has_right_charging = 1 but is_split = 0 (P-C5 violation)")
+
+    if not cap["has_left_charging"] and charging["left_charging"]:
+        issues_warn.append(
+            "has_left_charging = 0 but charging_flags.bit 0 = 1 (should be zero)"
+        )
+    if not cap["has_right_charging"] and charging["right_charging"]:
+        issues_warn.append(
+            "has_right_charging = 0 but charging_flags.bit 1 = 1 (should be zero)"
+        )
+    if charging["reserved_bits_2_7"] != 0:
+        bits_bin = f"0b{charging['reserved_bits_2_7']:06b}"
+        issues_warn.append(
+            f"charging_flags reserved bits 2-7 non-zero ({bits_bin})"
+        )
+
+    if cap["has_left_charging"]:
+        field_support["left_charging"] = "malformed" if issues_warn else "supported"
+    else:
+        field_support["left_charging"] = "unsupported"
+
+    if cap["has_right_charging"]:
+        field_support["right_charging"] = (
+            "malformed" if issues_fail or issues_warn else "supported"
+        )
+    else:
+        field_support["right_charging"] = "unsupported"
+
+    if issues_fail:
+        detail = " | ".join(issues_fail + issues_warn)
+        _record_c8_subcheck(extras, "charging_flags", "FAIL", detail)
+    elif issues_warn:
+        _record_c8_subcheck(
+            extras, "charging_flags", "WARN", " | ".join(issues_warn)
+        )
+    elif cap["has_left_charging"] or cap["has_right_charging"]:
+        _record_c8_subcheck(extras, "charging_flags", "PASS", None)
+
+
+# -----------------------------------------------------------------------------
 # Report model
 # -----------------------------------------------------------------------------
 
@@ -750,6 +848,8 @@ async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[s
                 if parsed is not None:
                     check_us1_fields(parsed, extras)
                     check_us2_split_link(parsed, extras)
+                    check_us3_output_endpoint(parsed, extras)
+                    check_us4_charging(parsed, extras)
                     is_split = bool(parsed["capability_bits"]["is_split"])
                     battery_raw = await _read_battery_raw(client, extras)
                     check_us2_battery(
