@@ -18,7 +18,14 @@
 # Usage:
 #   python3 conformance/conformance_tool.py [--timeout SEC] [--observe SEC]
 #                                           [--json] [--device-filter NAME]
+#                                           [--address IDENTIFIER]
+#                                           [--list-connected]
 #                                           [--no-color] [-h]
+#
+# macOS note: a connected BLE HID keyboard stops advertising, so active-scan
+# (the default) will not see it. In that case:
+#   1. run `--list-connected` to find the keyboard's CoreBluetooth identifier;
+#   2. rerun with `--address <id>` to skip scan and probe directly.
 #
 # For wire details: ../protocol/README.md (KBP 1.0 sections 1-13, KBP 1.1 section 14).
 # For user-visible contract: specs/001-connectivity-power/contracts/conformance-cli.md.
@@ -765,6 +772,123 @@ def default_field_support(declared_minor: str) -> dict[str, str]:
 # -----------------------------------------------------------------------------
 
 
+# macOS-only helpers: a BLE HID keyboard already connected to the host stops
+# advertising, so `BleakScanner.discover()` cannot see it. Fortunately
+# CoreBluetooth exposes retrieveConnectedPeripheralsWithServices_() and
+# retrievePeripheralsWithIdentifiers_() which do not depend on advertising
+# at all. We piggy-back on bleak's internal CentralManagerDelegate so the
+# returned peripheral can still be used by BleakClient downstream.
+#
+# `_scanner_keepalive` holds a reference to the BleakScanner whose internal
+# CBCentralManager owns the retrieved CBPeripheral; releasing it before the
+# BleakClient finishes would invalidate the peripheral.
+
+_scanner_keepalive: list[Any] = []
+
+
+async def _retrieve_bleak_scanner_for_cb_retrieve() -> Any | None:
+    """macOS only. Start a BleakScanner so its internal CBCentralManager is
+    powered-on and can be used for retrieve* calls. Returns the scanner (kept
+    alive via _scanner_keepalive) or None on non-Darwin / import failure."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        from bleak import BleakScanner  # noqa: F401
+    except ImportError:
+        return None
+    scanner = __import__("bleak", fromlist=["BleakScanner"]).BleakScanner(
+        service_uuids=[SERVICE_UUID]
+    )
+    _scanner_keepalive.append(scanner)
+    try:
+        await scanner.start()
+    except Exception:
+        return None
+    # Give CoreBluetooth a brief moment to settle (the state-powered-on event
+    # may still be in flight on the first ever call in a fresh Python process).
+    await asyncio.sleep(0.3)
+    return scanner
+
+
+async def _list_connected_darwin() -> list[dict[str, Any]]:
+    """macOS only. Enumerate peripherals currently connected to this Mac that
+    advertise the KBP service UUID. Returns [{address, name}] or []."""
+    scanner = await _retrieve_bleak_scanner_for_cb_retrieve()
+    if scanner is None:
+        return []
+    try:
+        from CoreBluetooth import CBUUID  # type: ignore[import-not-found]
+    except ImportError:
+        try:
+            await scanner.stop()
+        except Exception:
+            pass
+        return []
+    cm = scanner._backend._manager.central_manager
+    cbuuid = CBUUID.UUIDWithString_(SERVICE_UUID)
+    peripherals = cm.retrieveConnectedPeripheralsWithServices_([cbuuid]) or []
+    result = []
+    for p in peripherals:
+        ident = p.identifier()
+        name = p.name()
+        result.append(
+            {
+                "address": str(ident.UUIDString()) if ident else None,
+                "name": str(name) if name else None,
+            }
+        )
+    try:
+        await scanner.stop()
+    except Exception:
+        pass
+    return result
+
+
+async def _retrieve_peripheral_bledevice_darwin(address_str: str) -> Any | None:
+    """macOS only. Build a BLEDevice for a connected peripheral identified by
+    its CoreBluetooth UUID string. The returned BLEDevice is suitable as the
+    first positional arg to BleakClient."""
+    scanner = await _retrieve_bleak_scanner_for_cb_retrieve()
+    if scanner is None:
+        return None
+    try:
+        from bleak.backends.device import BLEDevice
+        from Foundation import NSUUID  # type: ignore[import-not-found]
+    except ImportError:
+        try:
+            await scanner.stop()
+        except Exception:
+            pass
+        return None
+    manager = scanner._backend._manager
+    cm = manager.central_manager
+    nsuuid = NSUUID.alloc().initWithUUIDString_(address_str)
+    if nsuuid is None:
+        try:
+            await scanner.stop()
+        except Exception:
+            pass
+        return None
+    peripherals = cm.retrievePeripheralsWithIdentifiers_([nsuuid]) or []
+    if not peripherals:
+        try:
+            await scanner.stop()
+        except Exception:
+            pass
+        return None
+    p = peripherals[0]
+    device = BLEDevice(
+        address=str(p.identifier().UUIDString()),
+        name=str(p.name()) if p.name() else None,
+        details=(p, manager),
+    )
+    # Deliberately do NOT stop the scanner: the BleakClient downstream needs
+    # the CentralManagerDelegate alive for its connect/notify cycle. The
+    # scanner (and thus manager) is kept alive by _scanner_keepalive and will
+    # be cleaned up when the Python process exits.
+    return device
+
+
 async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[str, Any]:
     """Discover a KBP keyboard, run C1-C12 checks against it, and return extras
     (keyboard info + characteristic presence + capability_bits + field_support).
@@ -791,32 +915,63 @@ async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[s
         "field_support": default_field_support("unknown"),
     }
 
-    # Scan for a KBP keyboard by service UUID.
-    print(
-        f"scanning for KBP keyboards (service={SERVICE_UUID}, timeout={args.timeout}s) ...",
-        file=sys.stderr,
-    )
-    try:
-        devices = await BleakScanner.discover(
-            timeout=args.timeout, service_uuids=[SERVICE_UUID]
+    # Scan for a KBP keyboard by service UUID. If `--address` is set, bypass
+    # scan entirely and retrieve the peripheral by CoreBluetooth identifier —
+    # that is the robust path for already-connected BLE HID keyboards on
+    # macOS, which otherwise stop advertising and become invisible to scan.
+    candidate = None
+    if args.address:
+        print(
+            f"skipping scan; retrieving peripheral by identifier {args.address} ...",
+            file=sys.stderr,
         )
-    except BleakError as exc:
-        _env_error(f"bleak scan failed: {exc}")
-        return extras
-    except OSError as exc:
-        # Linux (BlueZ): "No powered Bluetooth adapter"; Windows: BLE radio off.
-        _env_error(f"Bluetooth adapter error: {exc}")
-        return extras
+        if sys.platform != "darwin":
+            _env_error(
+                "--address is only supported on macOS (via CoreBluetooth "
+                "retrievePeripheralsWithIdentifiers:). On Linux/Windows a "
+                "connected BLE HID keyboard does not require retrieve and "
+                "regular scan should work."
+            )
+            return extras
+        candidate = await _retrieve_peripheral_bledevice_darwin(args.address)
+        if candidate is None:
+            _env_error(
+                f"identifier {args.address} did not resolve to a connected "
+                f"BLE peripheral. Run with --list-connected to see available "
+                f"identifiers."
+            )
+            return extras
+    else:
+        print(
+            f"scanning for KBP keyboards (service={SERVICE_UUID}, timeout={args.timeout}s) ...",
+            file=sys.stderr,
+        )
+        try:
+            devices = await BleakScanner.discover(
+                timeout=args.timeout, service_uuids=[SERVICE_UUID]
+            )
+        except BleakError as exc:
+            _env_error(f"bleak scan failed: {exc}")
+            return extras
+        except OSError as exc:
+            # Linux (BlueZ): "No powered Bluetooth adapter"; Windows: BLE radio off.
+            _env_error(f"Bluetooth adapter error: {exc}")
+            return extras
 
-    candidate = _choose_candidate(devices, args.device_filter)
-    if candidate is None:
-        _env_error(
-            "no KBP keyboard found by active scan. "
-            "Note: a connected BLE HID keyboard stops advertising, so you may need "
-            "to disconnect+reconnect it, or run conformance_tool_macos.py (macOS only) "
-            "which enumerates connected peripherals."
-        )
-        return extras
+        candidate = _choose_candidate(devices, args.device_filter)
+        if candidate is None:
+            hint = ""
+            if sys.platform == "darwin":
+                hint = (
+                    " On macOS, a connected BLE HID keyboard stops "
+                    "advertising; run `--list-connected` to see already-"
+                    "connected KBP peripherals and then `--address <id>` "
+                    "to probe one of them."
+                )
+            _env_error(
+                "no KBP keyboard found by active scan." + hint
+            )
+            return extras
 
     extras["keyboard"] = {
         "name": candidate.name,
@@ -1058,6 +1213,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Partial GAP-name match to pick a specific keyboard when multiple are present",
     )
     ap.add_argument(
+        "--address",
+        type=str,
+        default=None,
+        metavar="IDENTIFIER",
+        help=(
+            "Skip BLE scan and connect directly to this CoreBluetooth "
+            "identifier (macOS only). Use this when the keyboard is already "
+            "connected to the host and therefore not advertising. Get the "
+            "identifier via --list-connected."
+        ),
+    )
+    ap.add_argument(
+        "--list-connected",
+        action="store_true",
+        help=(
+            "List BLE peripherals currently connected to this host that "
+            "advertise the KBP service UUID, print {address, name} rows, "
+            "then exit 0 (macOS only; no-op elsewhere)."
+        ),
+    )
+    ap.add_argument(
         "--no-color",
         action="store_true",
         help="Disable ANSI color in human-readable output",
@@ -1068,6 +1244,41 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = Report(use_color=not args.no_color)
+
+    # --list-connected short-circuit: run before any other work so a stale
+    # --json flag does not pollute the stdout stream.
+    if args.list_connected:
+        if sys.platform != "darwin":
+            print(
+                "--list-connected is only supported on macOS. "
+                "On Linux/Windows a connected BLE HID keyboard remains "
+                "scannable; use the default `conformance_tool.py` scan path.",
+                file=sys.stderr,
+            )
+            return EXIT_ENV
+        try:
+            connected = asyncio.run(_list_connected_darwin())
+        except KeyboardInterrupt:
+            print("\ninterrupted", file=sys.stderr)
+            return EXIT_ENV
+        if args.json:
+            print(json.dumps({"connected": connected}, ensure_ascii=False, indent=2))
+        else:
+            if not connected:
+                print(
+                    "No KBP peripherals currently connected to this Mac.",
+                    file=sys.stderr,
+                )
+                print(
+                    "Hint: pair + connect the keyboard, then rerun.",
+                    file=sys.stderr,
+                )
+            else:
+                for row in connected:
+                    name = row.get("name") or "<no name>"
+                    addr = row.get("address") or "<no address>"
+                    print(f"{addr}\t{name}")
+        return EXIT_PASS
 
     # Run the async discovery + check pipeline.
     try:
