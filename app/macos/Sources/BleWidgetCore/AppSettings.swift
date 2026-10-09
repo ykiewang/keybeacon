@@ -3,11 +3,28 @@
 
 import Foundation
 
+public enum PinnedCorner: String, CaseIterable {
+    case topLeft = "top-left"
+    case topRight = "top-right"
+    case bottomLeft = "bottom-left"
+    case bottomRight = "bottom-right"
+
+    public var displayName: String {
+        switch self {
+        case .topLeft: return "左上"
+        case .topRight: return "右上"
+        case .bottomLeft: return "左下"
+        case .bottomRight: return "右下"
+        }
+    }
+}
+
 public final class AppSettings {
     private static let positionPrefix = "panelFrame"
     private static let lockedKey = "panelLocked"
     private static let migratedKey = "settingsMigratedV2"
     private static let selectedKeyboardKey = "selectedKeyboardIdentifier"
+    private static let pinnedCornerKey = "panelPinnedCorner"
 
     private static let legacyPositionPrefix = "totemPanelFrame"
     private static let legacyLockedKey = "totemPanelLocked"
@@ -23,6 +40,24 @@ public final class AppSettings {
     public var locked: Bool {
         get { defaults.bool(forKey: Self.lockedKey) }
         set { defaults.set(newValue, forKey: Self.lockedKey) }
+    }
+
+    // MARK: - Pinned corner (nil = remember absolute position, default)
+
+    public var pinnedCorner: PinnedCorner? {
+        get {
+            guard let raw = defaults.string(forKey: Self.pinnedCornerKey) else {
+                return nil
+            }
+            return PinnedCorner(rawValue: raw)
+        }
+        set {
+            if let v = newValue {
+                defaults.set(v.rawValue, forKey: Self.pinnedCornerKey)
+            } else {
+                defaults.removeObject(forKey: Self.pinnedCornerKey)
+            }
+        }
     }
 
     // MARK: - Selected keyboard (persisted, MR4 / FR-015)

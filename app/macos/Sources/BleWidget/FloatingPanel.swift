@@ -93,6 +93,20 @@ final class FloatingPanel: NSPanel {
         }
     }
 
+    /// Pinned corner. When non-nil, the panel is anchored to the given corner
+    /// of its *current* screen (determined by physical position), ignoring any
+    /// saved absolute coordinates. When nil, the panel remembers absolute
+    /// coordinates per screen.
+    var pinnedCorner: PinnedCorner? {
+        get { settings.pinnedCorner }
+        set {
+            settings.pinnedCorner = newValue
+            if newValue != nil {
+                applyPinnedCorner()
+            }
+        }
+    }
+
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 44),
@@ -162,9 +176,13 @@ final class FloatingPanel: NSPanel {
         ])
 
         contentView = content
-        restorePosition()
-        if !settings.hasPosition(screenID: screenID()) {
-            setDefaultPosition()
+        if settings.pinnedCorner != nil {
+            applyPinnedCorner()
+        } else {
+            restorePosition()
+            if !settings.hasPosition(screenID: screenID()) {
+                setDefaultPosition()
+            }
         }
         reflowFrameToContent()
     }
@@ -707,14 +725,35 @@ final class FloatingPanel: NSPanel {
         let newFrame = NSRect(x: topLeft.x, y: topLeft.y,
                               width: frame.width, height: desiredHeight)
         setFrame(newFrame, display: true, animate: false)
-        clampToVisibleBounds()
+        if pinnedCorner != nil {
+            applyPinnedCorner()
+        } else {
+            clampToVisibleBounds()
+        }
+    }
+
+    /// Returns the screen that currently contains the panel's center point.
+    /// Falls back to `self.screen`, then `NSScreen.main`. This is intentionally
+    /// NOT `NSScreen.main` (which tracks the key window / active screen and
+    /// would cause the panel to jump between displays whenever the user
+    /// switches focus).
+    private func currentScreen() -> NSScreen? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        if let hit = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
+            return hit
+        }
+        return self.screen ?? NSScreen.main
     }
 
     private func screenID() -> String {
-        NSScreen.main?.localizedName ?? "default"
+        currentScreen()?.localizedName ?? "default"
     }
 
     private func restorePosition() {
+        if pinnedCorner != nil {
+            // Pinned corners are computed, not restored.
+            return
+        }
         if let saved = settings.position(screenID: screenID()) {
             let parts = saved.split(separator: ",").compactMap { Double($0) }
             if parts.count == 2 {
@@ -726,7 +765,7 @@ final class FloatingPanel: NSPanel {
     }
 
     private func setDefaultPosition() {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = currentScreen() else { return }
         let margin: CGFloat = 20
         let visible = screen.visibleFrame
         let origin = NSPoint(
@@ -738,7 +777,7 @@ final class FloatingPanel: NSPanel {
     }
 
     private func clampToVisibleBounds() {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = currentScreen() else { return }
         let visible = screen.visibleFrame
         var origin = frame.origin
         origin.x = min(max(origin.x, visible.minX), visible.maxX - frame.width)
@@ -746,15 +785,49 @@ final class FloatingPanel: NSPanel {
         setFrameOrigin(origin)
     }
 
+    /// Anchor the panel to the configured corner of `currentScreen()`. Called
+    /// whenever pinnedCorner is non-nil (reflow, screen change, menu toggle).
+    func applyPinnedCorner() {
+        guard let corner = pinnedCorner, let screen = currentScreen() else { return }
+        let margin: CGFloat = 20
+        let visible = screen.visibleFrame
+        let x: CGFloat
+        let y: CGFloat
+        switch corner {
+        case .topLeft:
+            x = visible.minX + margin
+            y = visible.maxY - frame.height - margin
+        case .topRight:
+            x = visible.maxX - frame.width - margin
+            y = visible.maxY - frame.height - margin
+        case .bottomLeft:
+            x = visible.minX + margin
+            y = visible.minY + margin
+        case .bottomRight:
+            x = visible.maxX - frame.width - margin
+            y = visible.minY + margin
+        }
+        setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
     override var canBecomeKey: Bool { false }
 
     func savePosition() {
+        // When pinned to a corner, position is derived — don't persist drag
+        // coordinates (dragging will visually move but snap back on next
+        // reflow / pin apply).
+        if pinnedCorner != nil { return }
         let p = frame.origin
         settings.setPosition("\(p.x),\(p.y)", screenID: screenID())
     }
 
     override func mouseUp(with event: NSEvent) {
-        savePosition()
+        if pinnedCorner != nil {
+            // Snap back to the configured corner if user dragged while pinned.
+            applyPinnedCorner()
+        } else {
+            savePosition()
+        }
     }
 
     func update(_ status: KeyboardStatus) {

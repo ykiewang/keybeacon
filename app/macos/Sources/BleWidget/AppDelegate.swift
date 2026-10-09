@@ -87,6 +87,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
                 action: #selector(toggleLock), keyEquivalent: "l"
             )
         )
+
+        // "Pin to corner" submenu — anchors the panel to a visible-frame
+        // corner of its current screen so it never drifts when the user
+        // switches active window to another display.
+        let pinChooser = NSMenuItem(title: "钉到角落", action: nil, keyEquivalent: "")
+        let pinSubmenu = NSMenu()
+        let currentPin = panel.pinnedCorner
+
+        let offItem = NSMenuItem(
+            title: "关闭（记忆位置）",
+            action: #selector(setPinOff), keyEquivalent: ""
+        )
+        offItem.target = self
+        offItem.state = (currentPin == nil) ? .on : .off
+        pinSubmenu.addItem(offItem)
+        pinSubmenu.addItem(.separator())
+
+        for corner in PinnedCorner.allCases {
+            let item = NSMenuItem(
+                title: corner.displayName,
+                action: #selector(setPinCorner(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = corner.rawValue
+            item.state = (currentPin == corner) ? .on : .off
+            pinSubmenu.addItem(item)
+        }
+        pinChooser.submenu = pinSubmenu
+        menu.addItem(pinChooser)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
@@ -120,6 +150,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     @objc private func toggleLock() {
         panel.isLocked.toggle()
+    }
+
+    @objc private func setPinOff() {
+        panel.pinnedCorner = nil
+        buildMenu()
+    }
+
+    @objc private func setPinCorner(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let corner = PinnedCorner(rawValue: raw)
+        else { return }
+        panel.pinnedCorner = corner
+        buildMenu()
     }
 
     @objc private func selectKeyboard(_ sender: NSMenuItem) {
