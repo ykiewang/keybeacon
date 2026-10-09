@@ -4,6 +4,13 @@
 import AppKit
 import BleWidgetCore
 
+// UI toggle: when `false`, the "last-updated HH:mm:ss" captions in both
+// the FloatingPanel stale labels and the BatteryBarView frozen percent
+// readout are suppressed. All staleness logic (alpha dim, frozen battery
+// fill, isStale checks, DiagnosticsLogger entries) still runs.
+// Flip to `true` to restore the on-screen timestamps for debugging.
+fileprivate let showStaleTimestamps = false
+
 final class FloatingPanel: NSPanel {
     private let settings = AppSettings()
 
@@ -70,6 +77,10 @@ final class FloatingPanel: NSPanel {
     private let staleness = StalenessTracker()
     private var stalenessTimer: Timer?
     private var cachedConnectivity: ConnectivityStatus?
+
+    /// Last known staleness state per field_key — used only to emit a log
+    /// line on each live↔stale transition (not for rendering).
+    private var lastStaleStates: [String: Bool] = [:]
 
     private let baseContentHeight: CGFloat = 44
 
@@ -446,6 +457,56 @@ final class FloatingPanel: NSPanel {
         reflowFrameToContent()
     }
 
+    /// Thin wrapper around `StalenessTracker.isStale` that also emits a
+    /// diagnostic log entry on each live↔stale transition. Rendering uses
+    /// this instead of calling `staleness.isStale` directly so that we can
+    /// hide the on-screen "last-updated HH:mm:ss" labels while still keeping
+    /// a durable trail in `log stream --predicate 'subsystem ==
+    /// "com.keybeacon.app"'`.
+    private func isStaleTracked(fieldKey: String, now: TimeInterval) -> Bool {
+        let stale = staleness.isStale(fieldKey: fieldKey, now: now)
+        if lastStaleStates[fieldKey] != stale {
+            lastStaleStates[fieldKey] = stale
+            if stale {
+                let reason: String
+                if let last = staleness.lastNotifyAt(fieldKey: fieldKey) {
+                    let elapsed = max(0, now - last)
+                    reason = "window_elapsed last=\(Self.formatTimestamp(monotonic: last, now: now)) elapsed_s=\(String(format: "%.1f", elapsed))"
+                } else {
+                    reason = "no_notify_yet"
+                }
+                DiagnosticsLogger.staleness.fieldStale(fieldKey: fieldKey, reason: reason)
+            } else {
+                DiagnosticsLogger.staleness.fieldLive(fieldKey: fieldKey)
+            }
+        }
+        return stale
+    }
+
+    /// Apply the "last-updated HH:mm:ss" caption to a stale label. Currently a
+    /// no-op (the label is kept hidden) because
+    /// `showStaleTimestamps == false`; flip that flag to re-enable the
+    /// on-screen timestamps without touching the render sites.
+    private func applyStaleLabel(_ label: NSTextField,
+                                 fieldKey: String,
+                                 isStale: Bool,
+                                 now: TimeInterval,
+                                 lastOverride: TimeInterval? = nil) {
+        guard showStaleTimestamps else {
+            label.isHidden = true
+            label.stringValue = ""
+            return
+        }
+        if isStale,
+           let last = lastOverride ?? staleness.lastNotifyAt(fieldKey: fieldKey) {
+            label.isHidden = false
+            label.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
+        } else {
+            label.isHidden = true
+            label.stringValue = ""
+        }
+    }
+
     private func renderHostRow(status s: ConnectivityStatus, now: TimeInterval) {
         guard s.capability.hasHostConnection else {
             hostRow.isHidden = true
@@ -464,16 +525,10 @@ final class FloatingPanel: NSPanel {
             }
         }
         hostLabel.stringValue = text
-        let isStale = staleness.isStale(fieldKey: "host_connection", now: now)
+        let isStale = isStaleTracked(fieldKey: "host_connection", now: now)
         hostDot.alphaValue = isStale ? 0.5 : 1.0
         hostLabel.alphaValue = isStale ? 0.5 : 1.0
-        if isStale, let last = staleness.lastNotifyAt(fieldKey: "host_connection") {
-            hostStaleLabel.isHidden = false
-            hostStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-        } else {
-            hostStaleLabel.isHidden = true
-            hostStaleLabel.stringValue = ""
-        }
+        applyStaleLabel(hostStaleLabel, fieldKey: "host_connection", isStale: isStale, now: now)
     }
 
     private func renderProfileRow(status s: ConnectivityStatus, now: TimeInterval) {
@@ -496,16 +551,10 @@ final class FloatingPanel: NSPanel {
             let isOpen = s.profile.isOpen && isCurrent
             badge.apply(slotIndex: slotIndex, isCurrent: isCurrent, isOpen: isOpen)
         }
-        let isStale = staleness.isStale(fieldKey: "profile", now: now)
+        let isStale = isStaleTracked(fieldKey: "profile", now: now)
         profileCaption.alphaValue = isStale ? 0.5 : 1.0
         for badge in profileBadges { badge.alphaValue = isStale ? 0.5 : 1.0 }
-        if isStale, let last = staleness.lastNotifyAt(fieldKey: "profile") {
-            profileStaleLabel.isHidden = false
-            profileStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-        } else {
-            profileStaleLabel.isHidden = true
-            profileStaleLabel.stringValue = ""
-        }
+        applyStaleLabel(profileStaleLabel, fieldKey: "profile", isStale: isStale, now: now)
     }
 
     private func rebuildProfileBadgesIfNeeded(count: Int) {
@@ -535,19 +584,13 @@ final class FloatingPanel: NSPanel {
         splitLeftLabel.stringValue = leftOnline ? "左 在线" : "左 离线"
         splitRightLabel.stringValue = rightOnline ? "右 在线" : "右 离线"
 
-        let isStale = staleness.isStale(fieldKey: "split_link", now: now)
+        let isStale = isStaleTracked(fieldKey: "split_link", now: now)
         let alpha: CGFloat = isStale ? 0.5 : 1.0
         splitLeftDot.alphaValue = alpha
         splitRightDot.alphaValue = alpha
         splitLeftLabel.alphaValue = alpha
         splitRightLabel.alphaValue = alpha
-        if isStale, let last = staleness.lastNotifyAt(fieldKey: "split_link") {
-            splitStaleLabel.isHidden = false
-            splitStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-        } else {
-            splitStaleLabel.isHidden = true
-            splitStaleLabel.stringValue = ""
-        }
+        applyStaleLabel(splitStaleLabel, fieldKey: "split_link", isStale: isStale, now: now)
     }
 
     private func renderBatteryRow(status s: ConnectivityStatus, now: TimeInterval) {
@@ -589,24 +632,18 @@ final class FloatingPanel: NSPanel {
                     now: now
                 )
             }
-            let leftStale = staleness.isStale(fieldKey: "left_battery", now: now)
-            let rightStale = staleness.isStale(fieldKey: "right_battery", now: now)
+            let leftStale = isStaleTracked(fieldKey: "left_battery", now: now)
+            let rightStale = isStaleTracked(fieldKey: "right_battery", now: now)
             let anyStale = leftStale || rightStale
             batteryCaption.alphaValue = anyStale ? 0.5 : 1.0
-            if anyStale {
-                let lastLeft = staleness.lastNotifyAt(fieldKey: "left_battery")
-                let lastRight = staleness.lastNotifyAt(fieldKey: "right_battery")
-                let latest = [lastLeft, lastRight].compactMap { $0 }.max()
-                if let last = latest {
-                    batteryStaleLabel.isHidden = false
-                    batteryStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-                } else {
-                    batteryStaleLabel.isHidden = true
-                }
-            } else {
-                batteryStaleLabel.isHidden = true
-                batteryStaleLabel.stringValue = ""
-            }
+            let lastLeft = staleness.lastNotifyAt(fieldKey: "left_battery")
+            let lastRight = staleness.lastNotifyAt(fieldKey: "right_battery")
+            let latest = [lastLeft, lastRight].compactMap { $0 }.max()
+            applyStaleLabel(batteryStaleLabel,
+                            fieldKey: "left_battery",
+                            isStale: anyStale,
+                            now: now,
+                            lastOverride: latest)
         } else {
             installOverallBar()
             let overallCharging = s.capability.hasLeftCharging && s.chargingFlags.leftCharging
@@ -619,15 +656,9 @@ final class FloatingPanel: NSPanel {
                     now: now
                 )
             }
-            let isStale = staleness.isStale(fieldKey: "overall_battery", now: now)
+            let isStale = isStaleTracked(fieldKey: "overall_battery", now: now)
             batteryCaption.alphaValue = isStale ? 0.5 : 1.0
-            if isStale, let last = staleness.lastNotifyAt(fieldKey: "overall_battery") {
-                batteryStaleLabel.isHidden = false
-                batteryStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-            } else {
-                batteryStaleLabel.isHidden = true
-                batteryStaleLabel.stringValue = ""
-            }
+            applyStaleLabel(batteryStaleLabel, fieldKey: "overall_battery", isStale: isStale, now: now)
         }
     }
 
@@ -672,15 +703,9 @@ final class FloatingPanel: NSPanel {
         case .reserved(let code): text = String(format: "输出:未知(0x%02X)", code)
         }
         endpointLabel.stringValue = text
-        let isStale = staleness.isStale(fieldKey: "output_endpoint", now: now)
+        let isStale = isStaleTracked(fieldKey: "output_endpoint", now: now)
         endpointLabel.alphaValue = isStale ? 0.5 : 1.0
-        if isStale, let last = staleness.lastNotifyAt(fieldKey: "output_endpoint") {
-            endpointStaleLabel.isHidden = false
-            endpointStaleLabel.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
-        } else {
-            endpointStaleLabel.isHidden = true
-            endpointStaleLabel.stringValue = ""
-        }
+        applyStaleLabel(endpointStaleLabel, fieldKey: "output_endpoint", isStale: isStale, now: now)
     }
 
     private static let timeFormatter: DateFormatter = {
@@ -1014,10 +1039,18 @@ fileprivate final class BatteryBarView: NSView {
             fill.layer?.backgroundColor = Self.colorForPercent(clamped).cgColor
             fill.isHidden = false
             if let frozen = frozenAt {
-                let stamp = BatteryBarView.timeFormatter.string(
-                    from: Date().addingTimeInterval(-(max(0, now - frozen)))
-                )
-                percentLabel.stringValue = "\(clamped)% · \(stamp)"
+                // Keep the alpha=0.65 "frozen" visual, but suppress the
+                // trailing "· HH:mm:ss" caption unless the file-scope
+                // debug flag is enabled.
+                if showStaleTimestamps {
+                    let stamp = BatteryBarView.timeFormatter.string(
+                        from: Date().addingTimeInterval(-(max(0, now - frozen)))
+                    )
+                    percentLabel.stringValue = "\(clamped)% · \(stamp)"
+                } else {
+                    _ = frozen  // retained for future debug / breakpoint use
+                    percentLabel.stringValue = "\(clamped)%"
+                }
                 percentLabel.alphaValue = 0.65
             } else {
                 percentLabel.stringValue = "\(clamped)%"
