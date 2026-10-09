@@ -2,6 +2,21 @@
 # Copyright (c) 2026 The TOTEM ZMK Contributors / KeyBeacon Contributors
 # SPDX-License-Identifier: MIT
 #
+# ============================================================================
+# LEGACY TOOL — KBP 1.0 only, macOS-only.
+#
+# For the cross-platform (macOS / Linux / Windows) conformance tool that also
+# covers KBP 1.1 (A-group fields: connectivity + battery), see:
+#     conformance/conformance_tool.py
+#
+# This file is retained as:
+#   - a macOS-native quick self-test (zero bleak dependency);
+#   - a fallback when `bleak` is unavailable or buggy on a given macOS release;
+#   - a historical reference for the PyObjC-based CoreBluetooth probe.
+#
+# Do NOT add new KBP 1.1 features here; add them to conformance_tool.py.
+# ============================================================================
+#
 # KeyBeacon Protocol (KBP) conformance self-test.
 #
 # Evolves the developer probe into a checklist runner: it discovers a candidate
