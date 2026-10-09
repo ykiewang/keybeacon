@@ -12,6 +12,25 @@ final class FloatingPanel: NSPanel {
         NSTextField(labelWithString: $0)
     }
 
+    // KBP 1.1 "Connectivity & Power" card. Hidden by default; shown when the
+    // active keyboard exposes `AA440AA2-…` (per contracts/macos-ui.md §1.1).
+    // Inner rows are populated by the US phases (US1-US4); this task only
+    // wires up the shell + visibility hook.
+    private let connectivityCard: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.07).cgColor
+        v.layer?.cornerRadius = 8
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+    private let connectivityCardTitle = NSTextField(labelWithString: "连接与电量")
+    private var connectivityCardHeightConstraint: NSLayoutConstraint!
+    private let connectivityCardCollapsedHeight: CGFloat = 0
+    private let connectivityCardExpandedHeight: CGFloat = 72  // reserved for US-phase rows
+
+    private let baseContentHeight: CGFloat = 44
+
     var isLocked: Bool {
         get { settings.locked }
         set {
@@ -22,7 +41,7 @@ final class FloatingPanel: NSPanel {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -38,27 +57,68 @@ final class FloatingPanel: NSPanel {
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
         content.layer?.cornerRadius = 12
+        content.translatesAutoresizingMaskIntoConstraints = false
+
+        // Row 1 — layer + modifiers (unchanged KBP 1.0 behaviour).
+        let topRow = NSView()
+        topRow.translatesAutoresizingMaskIntoConstraints = false
 
         layerLabel.font = .monospacedSystemFont(ofSize: 15, weight: .semibold)
         layerLabel.textColor = .white
         layerLabel.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(layerLabel)
+        topRow.addSubview(layerLabel)
 
         let stack = NSStackView(views: modLabels)
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
+        topRow.addSubview(stack)
         for label in modLabels {
             label.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
             label.textColor = .gray
         }
 
         NSLayoutConstraint.activate([
-            layerLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            layerLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
-            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            layerLabel.leadingAnchor.constraint(equalTo: topRow.leadingAnchor, constant: 14),
+            layerLabel.centerYAnchor.constraint(equalTo: topRow.centerYAnchor),
+            stack.trailingAnchor.constraint(equalTo: topRow.trailingAnchor, constant: -14),
+            stack.centerYAnchor.constraint(equalTo: topRow.centerYAnchor),
+            topRow.heightAnchor.constraint(equalToConstant: baseContentHeight),
+        ])
+
+        // Row 2 — Connectivity & Power card (hidden by default).
+        connectivityCardTitle.font = .systemFont(ofSize: 11, weight: .medium)
+        connectivityCardTitle.textColor = NSColor.white.withAlphaComponent(0.72)
+        connectivityCardTitle.translatesAutoresizingMaskIntoConstraints = false
+        connectivityCard.addSubview(connectivityCardTitle)
+
+        connectivityCardHeightConstraint = connectivityCard.heightAnchor
+            .constraint(equalToConstant: connectivityCardCollapsedHeight)
+        connectivityCard.isHidden = true
+
+        NSLayoutConstraint.activate([
+            connectivityCardTitle.leadingAnchor.constraint(
+                equalTo: connectivityCard.leadingAnchor, constant: 10
+            ),
+            connectivityCardTitle.topAnchor.constraint(
+                equalTo: connectivityCard.topAnchor, constant: 8
+            ),
+            connectivityCardHeightConstraint,
+        ])
+
+        // Compose rows into a vertical stack.
+        let vstack = NSStackView(views: [topRow, connectivityCard])
+        vstack.orientation = .vertical
+        vstack.spacing = 6
+        vstack.translatesAutoresizingMaskIntoConstraints = false
+        vstack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
+        content.addSubview(vstack)
+
+        NSLayoutConstraint.activate([
+            vstack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            vstack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            vstack.topAnchor.constraint(equalTo: content.topAnchor),
+            vstack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
 
         contentView = content
@@ -66,6 +126,43 @@ final class FloatingPanel: NSPanel {
         if !settings.hasPosition(screenID: screenID()) {
             setDefaultPosition()
         }
+        reflowFrameToContent()
+    }
+
+    // MARK: - KBP 1.1 card visibility (invariant IV-X1 / U-5)
+
+    /// Show/hide the entire "Connectivity & Power" card based on whether the
+    /// active keyboard declares KBP 1.1 (presence of `AA440AA2-…`).
+    ///
+    /// Called by `AppDelegate` on `didDetermineKBPMinor(_:)`. Row contents are
+    /// filled in by the US-phase tasks (T023/T024/T029/T030/T034/T038); this
+    /// method only toggles the shell visibility and resizes the panel.
+    func setConnectivityCardVisible(_ visible: Bool) {
+        connectivityCard.isHidden = !visible
+        connectivityCardHeightConstraint.constant = visible
+            ? connectivityCardExpandedHeight
+            : connectivityCardCollapsedHeight
+        reflowFrameToContent()
+    }
+
+    /// Reconstrain the window frame to the current content height so the
+    /// visual chrome matches the row count. Preserves the top-left origin so
+    /// user-placed panels do not jump.
+    private func reflowFrameToContent() {
+        contentView?.layoutSubtreeIfNeeded()
+        let desiredHeight: CGFloat
+        if connectivityCard.isHidden {
+            desiredHeight = baseContentHeight + 10
+        } else {
+            desiredHeight = baseContentHeight + connectivityCardExpandedHeight + 6 + 10
+        }
+        let currentOrigin = frame.origin
+        let topLeft = NSPoint(x: currentOrigin.x,
+                              y: currentOrigin.y + frame.height - desiredHeight)
+        let newFrame = NSRect(x: topLeft.x, y: topLeft.y,
+                              width: frame.width, height: desiredHeight)
+        setFrame(newFrame, display: true, animate: false)
+        clampToVisibleBounds()
     }
 
     private func screenID() -> String {

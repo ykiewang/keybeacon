@@ -161,4 +161,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         statusItem.button?.toolTip = "检测到不受支持的 KeyBeacon 协议版本;请升级本应用。"
         buildMenu()
     }
+
+    func bleClient(_ client: BLEClient, didDetermineKBPMinor minor: KBPMinor) {
+        // IV-X1 / U-5: hide the entire 1.1 card when the keyboard is KBP 1.0.
+        switch minor {
+        case .onePointZero, .unknown:
+            panel.setConnectivityCardVisible(false)
+        case .onePointOne:
+            panel.setConnectivityCardVisible(true)
+        }
+    }
+
+    func bleClient(_ client: BLEClient, didUpdateConnectivity status: ConnectivityStatus) {
+        // Row contents are rendered by US-phase tasks (T023/T024/T029/T030/T034/T038).
+        // The Foundational phase only wires up the delivery path.
+        _ = status
+    }
+
+    func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {
+        // Row contents are rendered by US-phase task T030. Foundational only wires.
+        _ = status
+    }
 }

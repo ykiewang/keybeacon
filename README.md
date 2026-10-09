@@ -54,6 +54,12 @@ spec time. These are candidates, not commitments.
 
 ### A. Connectivity & power
 
+> **Status**: **implementation underway** as KBP 1.1 feature
+> `001-connectivity-power`. Specification:
+> [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md);
+> normative wire contract:
+> [`protocol/README.md §14`](protocol/README.md#14-kbp-11-connectivity--power-optional).
+
 | Metric | Why it helps a screenless split | ZMK feasibility | Protocol impact |
 |--------|---------------------------------|-----------------|-----------------|
 | Host link status | is the keyboard actually connected to the host | High — active-profile connected state + event | KBP 1.1 · new characteristic |
@@ -218,6 +224,11 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 具体 API 名在各项 spec 阶段再核对。以下均为候选项,而非承诺。
 
 ### A. 连接与电量
+
+> **状态**：**实施中**，对应 KBP 1.1 feature `001-connectivity-power`。规范：
+> [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md)；规范化
+> 线上契约：
+> [`protocol/README.md §14`](protocol/README.md#14-kbp-11-连接与电量可选特征)。
 
 | 指标 | 对无屏分体的价值 | ZMK 可行性 | 协议影响 |
 |------|----------------|-----------|---------|
