@@ -247,10 +247,14 @@ final class FloatingPanel: NSPanel {
             vstack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             connectivityCard.leadingAnchor.constraint(equalTo: vstack.leadingAnchor, constant: 10),
             connectivityCard.trailingAnchor.constraint(equalTo: vstack.trailingAnchor, constant: -10),
-            // compactRow: horizontally pinned to content with 10 pt insets,
-            // vertically centred so a single-line chip reads balanced.
-            compactRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
+            // compactRow: horizontally centred inside content, with min 10 pt
+            // breathing room on each side. The strict leading-equality we had
+            // before pinned the row flush-left so any extra width that
+            // reflowFrameToContent reserved (rowWidth + 24 vs rowWidth + 20)
+            // leaked onto the right side, which read as "data偏左".
+            compactRow.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: 10),
             compactRow.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -10),
+            compactRow.centerXAnchor.constraint(equalTo: content.centerXAnchor),
             compactRow.centerYAnchor.constraint(equalTo: content.centerYAnchor),
         ])
 
