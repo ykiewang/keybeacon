@@ -14,6 +14,7 @@ fileprivate let showStaleTimestamps = false
 final class FloatingPanel: NSPanel {
     private let settings = AppSettings()
 
+    private let topRow = NSView()
     private let layerLabel = NSTextField(labelWithString: "")
     private let modLabels: [NSTextField] = ["⇧", "⌃", "⌥", "⌘"].map {
         NSTextField(labelWithString: $0)
@@ -74,6 +75,41 @@ final class FloatingPanel: NSPanel {
     private let endpointStaleLabel = NSTextField(labelWithString: "")
     private let endpointRow = NSStackView()
 
+    // MARK: - Compact (single-row) mode subviews
+    //
+    // When `displayMode == .compact`, `compactRow` replaces both `topRow`
+    // and `connectivityCard`, packing everything into one horizontal strip:
+    //   "L1 ⇧⌃⌥⌘ │ ● P1 │ ●L85 ●R72 │ USB"
+    // Each sub-segment hides itself when its capability bit is 0 or when the
+    // keyboard is KBP 1.0 (no AA2). The segments share state with the full
+    // mode via the same cached* vars + staleness tracker; both layouts are
+    // kept up to date on every render so switching modes is instant.
+
+    private let compactRow = NSStackView()
+    private let compactLayerLabel = NSTextField(labelWithString: "")
+    private let compactModLabels: [NSTextField] = ["⇧", "⌃", "⌥", "⌘"].map {
+        NSTextField(labelWithString: $0)
+    }
+    private let compactSep1 = NSTextField(labelWithString: "│")
+    private let compactHostDot = FloatingPanel.makeDot(diameter: 8)
+    private let compactProfileLabel = NSTextField(labelWithString: "P—")
+    private let compactSep2 = NSTextField(labelWithString: "│")
+    private let compactSplitLeftDot = FloatingPanel.makeDot(diameter: 7)
+    private let compactLeftBattLabel = NSTextField(labelWithString: "L—")
+    private let compactSplitRightDot = FloatingPanel.makeDot(diameter: 7)
+    private let compactRightBattLabel = NSTextField(labelWithString: "R—")
+    private let compactSep3 = NSTextField(labelWithString: "│")
+    private let compactEndpointLabel = NSTextField(labelWithString: "—")
+    private let compactChargingLeftIcon = NSTextField(labelWithString: "⚡︎")
+    private let compactChargingRightIcon = NSTextField(labelWithString: "⚡︎")
+
+    // Sub-stacks that group related items so we can hide a whole segment
+    // (host+profile, split, battery, endpoint) atomically.
+    private let compactHostSegment = NSStackView()
+    private let compactProfileSegment = NSStackView()
+    private let compactSplitSegment = NSStackView()
+    private let compactEndpointSegment = NSStackView()
+
     private let staleness = StalenessTracker()
     private var stalenessTimer: Timer?
     private var cachedConnectivity: ConnectivityStatus?
@@ -118,6 +154,16 @@ final class FloatingPanel: NSPanel {
         }
     }
 
+    /// Current layout mode. Setter re-flows the frame + repaints both layouts
+    /// so the switch is instant.
+    var displayMode: DisplayMode {
+        get { settings.displayMode }
+        set {
+            settings.displayMode = newValue
+            applyDisplayMode()
+        }
+    }
+
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 44),
@@ -139,7 +185,6 @@ final class FloatingPanel: NSPanel {
         content.translatesAutoresizingMaskIntoConstraints = false
 
         // Row 1 — layer + modifiers (unchanged KBP 1.0 behaviour).
-        let topRow = NSView()
         topRow.translatesAutoresizingMaskIntoConstraints = false
 
         layerLabel.font = .monospacedSystemFont(ofSize: 15, weight: .semibold)
@@ -168,8 +213,12 @@ final class FloatingPanel: NSPanel {
         // Row 2 — Connectivity & Power card (hidden by default).
         buildConnectivityCard()
 
+        // Alternative single-row (compact) layout. Hidden unless displayMode
+        // == .compact; see applyDisplayMode().
+        buildCompactRow()
+
         // Compose rows into a vertical stack.
-        let vstack = NSStackView(views: [topRow, connectivityCard])
+        let vstack = NSStackView(views: [topRow, connectivityCard, compactRow])
         vstack.orientation = .vertical
         vstack.spacing = 6
         vstack.alignment = .leading
@@ -184,9 +233,12 @@ final class FloatingPanel: NSPanel {
             vstack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             connectivityCard.leadingAnchor.constraint(equalTo: vstack.leadingAnchor, constant: 10),
             connectivityCard.trailingAnchor.constraint(equalTo: vstack.trailingAnchor, constant: -10),
+            compactRow.leadingAnchor.constraint(equalTo: vstack.leadingAnchor, constant: 10),
+            compactRow.trailingAnchor.constraint(lessThanOrEqualTo: vstack.trailingAnchor, constant: -10),
         ])
 
         contentView = content
+        applyDisplayMode()
         if settings.pinnedCorner != nil {
             applyPinnedCorner()
         } else {
@@ -366,12 +418,140 @@ final class FloatingPanel: NSPanel {
         endpointRow.addArrangedSubview(endpointStaleLabel)
     }
 
+    // MARK: - Compact single-row layout (displayMode == .compact)
+
+    private func buildCompactRow() {
+        // Layer label (compact) — monospaced bold.
+        compactLayerLabel.font = .monospacedSystemFont(ofSize: 13, weight: .semibold)
+        compactLayerLabel.textColor = .white
+        compactLayerLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        // Modifier labels (⇧⌃⌥⌘).
+        let modStack = NSStackView(views: compactModLabels)
+        modStack.orientation = .horizontal
+        modStack.spacing = 3
+        modStack.translatesAutoresizingMaskIntoConstraints = false
+        for label in compactModLabels {
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.textColor = .gray
+        }
+
+        // Separators '│' — faint grey.
+        for sep in [compactSep1, compactSep2, compactSep3] {
+            sep.font = .systemFont(ofSize: 12, weight: .regular)
+            sep.textColor = NSColor.white.withAlphaComponent(0.35)
+            sep.translatesAutoresizingMaskIntoConstraints = false
+        }
+
+        // Host segment: dot + "P1".
+        compactProfileLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        compactProfileLabel.textColor = .white
+        compactProfileLabel.translatesAutoresizingMaskIntoConstraints = false
+        compactHostSegment.orientation = .horizontal
+        compactHostSegment.spacing = 4
+        compactHostSegment.alignment = .centerY
+        compactHostSegment.translatesAutoresizingMaskIntoConstraints = false
+        compactHostSegment.addArrangedSubview(compactHostDot)
+        compactHostSegment.addArrangedSubview(compactProfileLabel)
+
+        // Split segment: ●L85 ●R72 (with charging ⚡ overlays).
+        compactLeftBattLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        compactLeftBattLabel.textColor = .white
+        compactLeftBattLabel.translatesAutoresizingMaskIntoConstraints = false
+        compactRightBattLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        compactRightBattLabel.textColor = .white
+        compactRightBattLabel.translatesAutoresizingMaskIntoConstraints = false
+        for icon in [compactChargingLeftIcon, compactChargingRightIcon] {
+            icon.font = .systemFont(ofSize: 10, weight: .bold)
+            icon.textColor = .systemYellow
+            icon.toolTip = "充电中"
+            icon.setAccessibilityLabel("充电中")
+            icon.isHidden = true
+            icon.translatesAutoresizingMaskIntoConstraints = false
+        }
+        let leftGroup = NSStackView(views: [compactSplitLeftDot, compactLeftBattLabel, compactChargingLeftIcon])
+        leftGroup.orientation = .horizontal
+        leftGroup.spacing = 3
+        leftGroup.alignment = .centerY
+        leftGroup.translatesAutoresizingMaskIntoConstraints = false
+        let rightGroup = NSStackView(views: [compactSplitRightDot, compactRightBattLabel, compactChargingRightIcon])
+        rightGroup.orientation = .horizontal
+        rightGroup.spacing = 3
+        rightGroup.alignment = .centerY
+        rightGroup.translatesAutoresizingMaskIntoConstraints = false
+        compactSplitSegment.orientation = .horizontal
+        compactSplitSegment.spacing = 8
+        compactSplitSegment.alignment = .centerY
+        compactSplitSegment.translatesAutoresizingMaskIntoConstraints = false
+        compactSplitSegment.addArrangedSubview(leftGroup)
+        compactSplitSegment.addArrangedSubview(rightGroup)
+
+        // Endpoint segment.
+        compactEndpointLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        compactEndpointLabel.textColor = .white
+        compactEndpointLabel.translatesAutoresizingMaskIntoConstraints = false
+        compactEndpointSegment.orientation = .horizontal
+        compactEndpointSegment.spacing = 4
+        compactEndpointSegment.alignment = .centerY
+        compactEndpointSegment.translatesAutoresizingMaskIntoConstraints = false
+        compactEndpointSegment.addArrangedSubview(compactEndpointLabel)
+
+        // Final row assembly.
+        compactRow.orientation = .horizontal
+        compactRow.spacing = 8
+        compactRow.alignment = .centerY
+        compactRow.translatesAutoresizingMaskIntoConstraints = false
+        compactRow.addArrangedSubview(compactLayerLabel)
+        compactRow.addArrangedSubview(modStack)
+        compactRow.addArrangedSubview(compactSep1)
+        compactRow.addArrangedSubview(compactHostSegment)
+        compactRow.addArrangedSubview(compactSep2)
+        compactRow.addArrangedSubview(compactSplitSegment)
+        compactRow.addArrangedSubview(compactSep3)
+        compactRow.addArrangedSubview(compactEndpointSegment)
+
+        // All 1.1 segments start hidden; render* enables them per capability.
+        compactSep1.isHidden = true
+        compactHostSegment.isHidden = true
+        compactSep2.isHidden = true
+        compactSplitSegment.isHidden = true
+        compactSep3.isHidden = true
+        compactEndpointSegment.isHidden = true
+        compactRow.isHidden = true
+    }
+
+    // MARK: - Display mode switching
+
+    private func applyDisplayMode() {
+        let mode = settings.displayMode
+        switch mode {
+        case .full:
+            topRow.isHidden = false
+            // connectivityCard visibility is driven by setConnectivityCardVisible();
+            // don't override it here.
+            compactRow.isHidden = true
+        case .compact:
+            topRow.isHidden = true
+            connectivityCard.isHidden = true
+            compactRow.isHidden = false
+        }
+        // Re-render so the newly-visible layout picks up current data.
+        renderConnectivity()
+        reflowFrameToContent()
+    }
+
     // MARK: - KBP 1.1 card visibility (invariant IV-X1 / U-5)
 
     /// Show/hide the entire "Connectivity & Power" card based on whether the
     /// active keyboard declares KBP 1.1 (presence of `AA440AA2-…`).
+    /// In compact mode the card is always hidden; the compact row's 1.1
+    /// segments are driven by `renderConnectivity` instead.
     func setConnectivityCardVisible(_ visible: Bool) {
-        connectivityCard.isHidden = !visible
+        if settings.displayMode == .full {
+            connectivityCard.isHidden = !visible
+        } else {
+            connectivityCard.isHidden = true
+        }
         if visible {
             startStalenessTimer()
         } else {
@@ -383,6 +563,13 @@ final class FloatingPanel: NSPanel {
             splitRow.isHidden = true
             batteryRow.isHidden = true
             endpointRow.isHidden = true
+            // Compact segments too.
+            compactSep1.isHidden = true
+            compactHostSegment.isHidden = true
+            compactSep2.isHidden = true
+            compactSplitSegment.isHidden = true
+            compactSep3.isHidden = true
+            compactEndpointSegment.isHidden = true
             cachedBatteryStatus = nil
             cachedOverallReading = nil
             cachedOverallReadingAt = nil
@@ -446,6 +633,12 @@ final class FloatingPanel: NSPanel {
             splitRow.isHidden = true
             batteryRow.isHidden = true
             endpointRow.isHidden = true
+            compactSep1.isHidden = true
+            compactHostSegment.isHidden = true
+            compactSep2.isHidden = true
+            compactSplitSegment.isHidden = true
+            compactSep3.isHidden = true
+            compactEndpointSegment.isHidden = true
             reflowFrameToContent()
             return
         }
@@ -454,7 +647,121 @@ final class FloatingPanel: NSPanel {
         renderSplitRow(status: s, now: now)
         renderBatteryRow(status: s, now: now)
         renderEndpointRow(status: s, now: now)
+        renderCompactSegments(status: s, now: now)
         reflowFrameToContent()
+    }
+
+    /// Mirror the full-mode render output into the compact single-row layout.
+    /// Called at the tail of `renderConnectivity` so compact state stays
+    /// current even while hidden (switching displayMode is instant).
+    private func renderCompactSegments(status s: ConnectivityStatus, now: TimeInterval) {
+        // Host dot + profile index — one visual segment.
+        let hostVisible = s.capability.hasHostConnection || s.capability.hasProfile
+        compactHostSegment.isHidden = !hostVisible
+        compactSep1.isHidden = !hostVisible
+        if s.capability.hasHostConnection {
+            compactHostDot.isHidden = false
+            let connected = s.link.connected
+            compactHostDot.layer?.backgroundColor =
+                (connected ? NSColor.systemGreen : NSColor.systemGray).cgColor
+            let hostStale = isStaleTracked(fieldKey: "host_connection", now: now)
+            compactHostDot.alphaValue = hostStale ? 0.5 : 1.0
+        } else {
+            compactHostDot.isHidden = true
+        }
+        if s.capability.hasProfile {
+            compactProfileLabel.isHidden = false
+            let maxSlot = max(1, s.profile.maxSlots)
+            let idx: UInt8 = {
+                let raw = s.profile.index
+                if raw == 0 { return 0 }
+                return min(raw, maxSlot)
+            }()
+            let suffix = s.profile.isOpen ? "⋯" : ""
+            compactProfileLabel.stringValue = (idx == 0 ? "P—" : "P\(idx)") + suffix
+            let profStale = isStaleTracked(fieldKey: "profile", now: now)
+            compactProfileLabel.alphaValue = profStale ? 0.5 : 1.0
+        } else {
+            compactProfileLabel.isHidden = true
+        }
+
+        // Split + per-side battery segment.
+        let splitVisible = s.capability.isSplit
+        compactSplitSegment.isHidden = !splitVisible
+        compactSep2.isHidden = !splitVisible
+        if splitVisible {
+            let leftOnline = s.capability.hasSplitLink ? s.splitFlags.leftOnline : true
+            let rightOnline = s.capability.hasSplitLink ? s.splitFlags.rightOnline : true
+            compactSplitLeftDot.layer?.backgroundColor =
+                (leftOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
+            compactSplitRightDot.layer?.backgroundColor =
+                (rightOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
+            compactLeftBattLabel.stringValue = Self.compactBatteryText(
+                prefix: "L", reading: cachedLeftReading
+            )
+            compactRightBattLabel.stringValue = Self.compactBatteryText(
+                prefix: "R", reading: cachedRightReading
+            )
+            let leftStale = isStaleTracked(fieldKey: "left_battery", now: now)
+            let rightStale = isStaleTracked(fieldKey: "right_battery", now: now)
+            compactLeftBattLabel.alphaValue = leftStale ? 0.5 : 1.0
+            compactRightBattLabel.alphaValue = rightStale ? 0.5 : 1.0
+            let splitStale = isStaleTracked(fieldKey: "split_link", now: now)
+            let splitAlpha: CGFloat = splitStale ? 0.5 : 1.0
+            compactSplitLeftDot.alphaValue = splitAlpha
+            compactSplitRightDot.alphaValue = splitAlpha
+            compactChargingLeftIcon.isHidden =
+                !(s.capability.hasLeftCharging && s.chargingFlags.leftCharging)
+            compactChargingRightIcon.isHidden =
+                !(s.capability.hasRightCharging && s.chargingFlags.rightCharging)
+        } else {
+            // Non-split keyboard: show overall battery once in the "left" slot.
+            let hasOverall = cachedOverallReading != nil
+            compactSplitSegment.isHidden = !hasOverall
+            compactSep2.isHidden = !hasOverall
+            if hasOverall {
+                compactSplitLeftDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
+                compactLeftBattLabel.stringValue = Self.compactBatteryText(
+                    prefix: "", reading: cachedOverallReading
+                )
+                compactSplitRightDot.isHidden = true
+                compactRightBattLabel.isHidden = true
+                let battStale = isStaleTracked(fieldKey: "overall_battery", now: now)
+                compactLeftBattLabel.alphaValue = battStale ? 0.5 : 1.0
+                compactChargingLeftIcon.isHidden =
+                    !(s.capability.hasLeftCharging && s.chargingFlags.leftCharging)
+                compactChargingRightIcon.isHidden = true
+            }
+        }
+
+        // Endpoint segment.
+        compactEndpointSegment.isHidden = !s.capability.hasOutputEndpoint
+        compactSep3.isHidden = !s.capability.hasOutputEndpoint
+        if s.capability.hasOutputEndpoint {
+            let txt: String
+            switch s.output {
+            case .unknown: txt = "—"
+            case .usb:     txt = "USB"
+            case .ble:     txt = "BLE"
+            case .reserved(let code): txt = String(format: "0x%02X", code)
+            }
+            compactEndpointLabel.stringValue = txt
+            let epStale = isStaleTracked(fieldKey: "output_endpoint", now: now)
+            compactEndpointLabel.alphaValue = epStale ? 0.5 : 1.0
+        }
+    }
+
+    private static func compactBatteryText(
+        prefix: String, reading: BatteryStatus.BatteryReading?
+    ) -> String {
+        guard let r = reading else { return "\(prefix)—" }
+        switch r {
+        case .percent(let n):
+            let clamped = max(0, min(100, Int(n)))
+            return "\(prefix)\(clamped)"
+        case .unavailable:
+            return "\(prefix)—"
+        }
     }
 
     /// Thin wrapper around `StalenessTracker.isStale` that also emits a
@@ -738,17 +1045,27 @@ final class FloatingPanel: NSPanel {
     private func reflowFrameToContent() {
         contentView?.layoutSubtreeIfNeeded()
         let desiredHeight: CGFloat
-        if connectivityCard.isHidden {
+        let desiredWidth: CGFloat
+        if settings.displayMode == .compact {
+            let rowHeight = max(22, compactRow.fittingSize.height)
+            desiredHeight = rowHeight + 16
+            let rowWidth = compactRow.fittingSize.width
+            // Keep a reasonable minimum so a disconnected keyboard doesn't
+            // produce a tiny unreadable chip.
+            desiredWidth = max(160, rowWidth + 24)
+        } else if connectivityCard.isHidden {
             desiredHeight = baseContentHeight + 10
+            desiredWidth = 240
         } else {
             let cardHeight = max(24, connectivityCard.fittingSize.height)
             desiredHeight = baseContentHeight + cardHeight + 6 + 10
+            desiredWidth = 240
         }
         let currentOrigin = frame.origin
         let topLeft = NSPoint(x: currentOrigin.x,
                               y: currentOrigin.y + frame.height - desiredHeight)
         let newFrame = NSRect(x: topLeft.x, y: topLeft.y,
-                              width: frame.width, height: desiredHeight)
+                              width: desiredWidth, height: desiredHeight)
         setFrame(newFrame, display: true, animate: false)
         if pinnedCorner != nil {
             applyPinnedCorner()
@@ -856,13 +1173,21 @@ final class FloatingPanel: NSPanel {
     }
 
     func update(_ status: KeyboardStatus) {
-        layerLabel.stringValue = status.connected ? status.layerName : "未连接"
+        let txt = status.connected ? status.layerName : "未连接"
+        layerLabel.stringValue = txt
+        compactLayerLabel.stringValue = txt
         let active = [
             status.shiftActive, status.controlActive,
             status.optionActive, status.commandActive,
         ]
         for (label, on) in zip(modLabels, active) {
             label.textColor = on ? .white : .gray
+        }
+        for (label, on) in zip(compactModLabels, active) {
+            label.textColor = on ? .white : .gray
+        }
+        if settings.displayMode == .compact {
+            reflowFrameToContent()
         }
     }
 }

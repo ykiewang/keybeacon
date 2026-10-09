@@ -19,6 +19,18 @@ public enum PinnedCorner: String, CaseIterable {
     }
 }
 
+public enum DisplayMode: String, CaseIterable {
+    case full = "full"
+    case compact = "compact"
+
+    public var displayName: String {
+        switch self {
+        case .full: return "完整"
+        case .compact: return "精简"
+        }
+    }
+}
+
 public final class AppSettings {
     private static let positionPrefix = "panelFrame"
     private static let lockedKey = "panelLocked"
@@ -26,6 +38,7 @@ public final class AppSettings {
     private static let selectedKeyboardKey = "selectedKeyboardIdentifier"
     private static let pinnedCornerKey = "panelPinnedCorner"
     private static let panelVisibleKey = "panelVisible"
+    private static let displayModeKey = "panelDisplayMode"
 
     private static let legacyPositionPrefix = "totemPanelFrame"
     private static let legacyLockedKey = "totemPanelLocked"
@@ -49,6 +62,21 @@ public final class AppSettings {
             return defaults.bool(forKey: Self.panelVisibleKey)
         }
         set { defaults.set(newValue, forKey: Self.panelVisibleKey) }
+    }
+
+    // MARK: - Display mode (full = multi-row card, compact = single-row)
+
+    /// Floating panel layout. `.full` matches the KBP 1.1 multi-row card
+    /// (default). `.compact` packs everything into a single-row high-density
+    /// strip; the user picks via the menu-bar "显示模式" submenu.
+    public var displayMode: DisplayMode {
+        get {
+            guard let raw = defaults.string(forKey: Self.displayModeKey) else {
+                return .full
+            }
+            return DisplayMode(rawValue: raw) ?? .full
+        }
+        set { defaults.set(newValue.rawValue, forKey: Self.displayModeKey) }
     }
 
     // MARK: - Panel lock

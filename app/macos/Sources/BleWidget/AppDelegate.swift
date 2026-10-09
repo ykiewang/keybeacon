@@ -131,6 +131,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         pinChooser.submenu = pinSubmenu
         menu.addItem(pinChooser)
 
+        // "Display mode" submenu — 完整 (multi-row card) / 精简 (single-row).
+        let modeChooser = NSMenuItem(title: "显示模式", action: nil, keyEquivalent: "")
+        let modeSubmenu = NSMenu()
+        let currentMode = panel.displayMode
+        for mode in DisplayMode.allCases {
+            let item = NSMenuItem(
+                title: mode.displayName,
+                action: #selector(setDisplayMode(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = (currentMode == mode) ? .on : .off
+            modeSubmenu.addItem(item)
+        }
+        modeChooser.submenu = modeSubmenu
+        menu.addItem(modeChooser)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
@@ -188,6 +205,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
               let corner = PinnedCorner(rawValue: raw)
         else { return }
         panel.pinnedCorner = corner
+        buildMenu()
+    }
+
+    @objc private func setDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = DisplayMode(rawValue: raw)
+        else { return }
+        panel.displayMode = mode
         buildMenu()
     }
 
