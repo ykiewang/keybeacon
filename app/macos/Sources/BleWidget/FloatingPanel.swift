@@ -121,6 +121,12 @@ final class FloatingPanel: NSPanel {
     /// symmetric top+bottom so the single line is vertically centred).
     private let vstack = NSStackView()
 
+    /// Remembered KBP 1.1 capability — set by `setConnectivityCardVisible`.
+    /// Needed because `applyDisplayMode` cannot ask the delegate again:
+    /// when the user switches full → compact → full we must know whether
+    /// the active keyboard still exposes AA2 so we can re-reveal the card.
+    private var kbp11CardShouldShow: Bool = false
+
     /// Last known staleness state per field_key — used only to emit a log
     /// line on each live↔stale transition (not for rendering).
     private var lastStaleStates: [String: Bool] = [:]
@@ -548,8 +554,11 @@ final class FloatingPanel: NSPanel {
         switch mode {
         case .full:
             topRow.isHidden = false
-            // connectivityCard visibility is driven by setConnectivityCardVisible();
-            // don't override it here.
+            // Restore card visibility from the remembered KBP 1.1 state —
+            // the previous version left this up to setConnectivityCardVisible
+            // which is only called on KBPMinor change, so a full → compact →
+            // full round-trip left the card hidden.
+            connectivityCard.isHidden = !kbp11CardShouldShow
             compactRow.isHidden = true
         case .compact:
             topRow.isHidden = true
@@ -568,6 +577,7 @@ final class FloatingPanel: NSPanel {
     /// In compact mode the card is always hidden; the compact row's 1.1
     /// segments are driven by `renderConnectivity` instead.
     func setConnectivityCardVisible(_ visible: Bool) {
+        kbp11CardShouldShow = visible
         if settings.displayMode == .full {
             connectivityCard.isHidden = !visible
         } else {
