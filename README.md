@@ -54,25 +54,35 @@ spec time. These are candidates, not commitments.
 
 ### A. Connectivity & power
 
-| Metric | Why it helps a screenless split | ZMK feasibility | Protocol impact |
-|--------|---------------------------------|-----------------|-----------------|
-| Host link status | is the keyboard actually connected to the host | High — active-profile connected state + event | KBP 1.1 · new characteristic |
-| Active BLE profile | which profile slot (1–5), and whether it's open for pairing | High — profile index / open state | KBP 1.1 · same characteristic |
-| Per-half link status | a split half dropping offline is visible at a glance | High — central-side peripheral status event | KBP 1.1 · new characteristic |
-| Per-half battery | know which half to charge | High — battery + peripheral-battery events | KBP 1.1 · new characteristic |
-| Active output | whether keystrokes go to USB or BLE | High — selected-endpoint + change event | KBP 1.1 · field / characteristic |
-| Charging status | whether a half is charging | Low — most boards lack a charge-detect pin | optional · hardware-dependent |
+> **Status**: ✅ **Shipped in KBP 1.1** — released 2026-10-09.
+> Specification: [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md);
+> firmware module: [`zmk-keybeacon@v1.1.2`](https://github.com/ykiewang/zmk-keybeacon/releases/tag/v1.1.2)
+> ([CHANGELOG](https://github.com/ykiewang/zmk-keybeacon/blob/main/CHANGELOG.md));
+> normative wire contract: [`protocol/README.md §14`](protocol/README.md#14-kbp-11-connectivity--power-optional).
+
+| Metric | Status | Why it helps a screenless split | ZMK feasibility | Protocol impact |
+|--------|--------|---------------------------------|-----------------|-----------------|
+| Host link status | ✅ Shipped (v1.1) | is the keyboard actually connected to the host | High — active-profile connected state + event | KBP 1.1 · AA2 bytes `host_state` + `last_disconnect_reason` |
+| Active BLE profile | ✅ Shipped (v1.1) | which profile slot (1–5), and whether it's open for pairing | High — profile index / open state | KBP 1.1 · AA2 bytes `profile_index` + `profile_max_slots` |
+| Per-half link status | ✅ Shipped (v1.1) | a split half dropping offline is visible at a glance | High — proxied via `zmk_peripheral_battery_state_changed` + 75 s TTL (ZMK does not expose a central-side split-link API at commit `6b44d33d`) | KBP 1.1 · AA2 `split_flags` bits 0–1 |
+| Per-half battery | ✅ Shipped (v1.1) | know which half to charge | High — battery + peripheral-battery events (requires `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`) | KBP 1.1 · AA3 payload `[0]` / `[1]` |
+| Active output | ✅ Shipped (v1.1) | whether keystrokes go to USB or BLE | High — `zmk_endpoints_selected()` + change event | KBP 1.1 · AA2 `output_endpoint` byte |
+| Charging status | ⚠️ Protocol-defined; hardware-dependent (corne lacks a charge-detect GPIO, so capability bits 5–6 stay `0`) | whether a half is charging | Low — most boards lack a charge-detect pin | KBP 1.1 · AA2 `charging_flags` bits 0–1 (opt-in via capability bits) |
 
 ### B. Input & lock state
 
+> **Status**: 📋 Planned — no implementation yet. Would land as additive **KBP 1.2** fields.
+
 | Metric | Why it helps a screenless split | ZMK feasibility | Protocol impact |
 |--------|---------------------------------|-----------------|-----------------|
-| Caps-Word active | visualize Caps-Word with no indicator LED | Medium — behavior state needs a small hook | KBP 1.1 · field |
-| Host lock LEDs | Caps / Num / Scroll Lock reported by the host | High — HID indicators + change event | KBP 1.1 · field / characteristic |
-| Full active-layer stack | see every active layer, not just the top one | High — iterate per-layer active state | KBP 1.1 · appended field |
-| Sticky / one-shot pending | a pending sticky modifier or layer | Medium — partly already in `mods` | KBP 1.1 · field (partial overlap) |
+| Caps-Word active | visualize Caps-Word with no indicator LED | Medium — behavior state needs a small hook | KBP 1.2 · field |
+| Host lock LEDs | Caps / Num / Scroll Lock reported by the host | High — HID indicators + change event | KBP 1.2 · field / characteristic |
+| Full active-layer stack | see every active layer, not just the top one | High — iterate per-layer active state | KBP 1.2 · appended field |
+| Sticky / one-shot pending | a pending sticky modifier or layer | Medium — partly already in `mods` | KBP 1.2 · field (partial overlap) |
 
 ### C. Typing stats
+
+> **Status**: 📋 Planned — no implementation yet. Would land as additive **KBP 1.2+** characteristics.
 
 | Metric | Why it helps | ZMK feasibility | Protocol impact |
 |--------|--------------|-----------------|-----------------|
@@ -82,9 +92,11 @@ spec time. These are candidates, not commitments.
 
 ### D. Device health
 
+> **Status**: 📋 Planned — no implementation yet. Order TBD; `RSSI` is lowest priority.
+
 | Metric | Why it helps | ZMK feasibility | Protocol impact |
 |--------|--------------|-----------------|-----------------|
-| Activity state | tell when a half has gone idle / asleep | High — activity state + event | KBP 1.1 · field |
+| Activity state | tell when a half has gone idle / asleep | High — activity state + event | KBP 1.x · field |
 | RGB / backlight state | confirm effect, brightness, on/off after a blind toggle | Medium — underglow / backlight getters + events | KBP 1.x · characteristic |
 | Link quality (RSSI) | signal strength of the host or split link | Low — needs HCI; not exposed by default | later |
 | Uptime | time since last reset (diagnostics) | High but low value — `k_uptime` | KBP 1.x · field |
@@ -218,6 +230,11 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 具体 API 名在各项 spec 阶段再核对。以下均为候选项,而非承诺。
 
 ### A. 连接与电量
+
+> **状态**：**实施中**，对应 KBP 1.1 feature `001-connectivity-power`。规范：
+> [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md)；规范化
+> 线上契约：
+> [`protocol/README.md §14`](protocol/README.md#14-kbp-11-连接与电量可选特征)。
 
 | 指标 | 对无屏分体的价值 | ZMK 可行性 | 协议影响 |
 |------|----------------|-----------|---------|

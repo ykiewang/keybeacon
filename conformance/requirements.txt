@@ -1,0 +1,21 @@
+# KeyBeacon Protocol (KBP) conformance tool — Python dependencies.
+#
+# Scope:
+#   - The primary cross-platform tool `conformance_tool.py` uses `bleak`
+#     (macOS 12+ / BlueZ 5.56+ / WinRT 10.0.17134+).
+#   - The macOS legacy tool `conformance_tool_macos.py` uses PyObjC
+#     (CoreBluetooth) and is only installed on Darwin.
+#   - `pytest` is required to run the pure-function parsing tests
+#     under `conformance/tests/`.
+#
+# Install:
+#   python3 -m pip install -U -r conformance/requirements.txt
+
+# Primary cross-platform BLE backend for conformance_tool.py.
+bleak>=0.21
+
+# macOS-only legacy backend for conformance_tool_macos.py.
+pyobjc-framework-CoreBluetooth>=9.0; sys_platform == "darwin"
+
+# Pure-function unit tests for payload parsing (conformance/tests/).
+pytest>=7.0

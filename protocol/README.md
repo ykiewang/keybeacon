@@ -1,6 +1,10 @@
+<a id="en-kbp"></a>
+
 # KeyBeacon Protocol (KBP)
 
-**Version**: 1.0.0 · **License**: MIT · **Status**: Released standard
+**English** · [中文](#zh-kbp)
+
+**Version**: 1.1.0 · **License**: MIT · **Status**: Released standard
 
 > **What this is**: KeyBeacon is an open, implementation-neutral protocol by which a keyboard
 > reports its **live internal state the host cannot otherwise know** — the active layer and the
@@ -187,20 +191,193 @@ tool automates):
 
 ## 13. Changelog
 
+- **1.1.0** — KBP 1.1 (MINOR): adds two optional characteristics `AA440AA2-…`
+  (Connectivity: capability bits + host-state + profile + split-link + output
+  endpoint + per-half charging flags) and `AA440AA3-…` (Battery: overall or
+  per-half percent); service UUID and the `AA440AA1-…` payload are unchanged.
+  See §14 and `CHANGELOG.md` 1.1.0.
 - **1.0.0** — Initial KeyBeacon Protocol: BLE GATT service/characteristic, service-UUID
   identification, GAP-name identity, `[layer_index][mods][layer_name]` payload, READ/NOTIFY with
   change suppression, conformance checklist, and UUID-based MAJOR versioning. Consolidates the
   feature-001 status-snapshot contract and the feature-002 discovery-and-identity amendment.
 
+## 14. KBP 1.1 Connectivity & Power (optional)
+
+**Added in KBP 1.1 (MINOR).** The service UUID is unchanged at `AA440AA0-…`;
+the KBP 1.0 characteristic `AA440AA1-…` is **completely untouched**. KBP 1.1
+introduces **two new optional characteristics** that a keyboard MAY expose to
+describe its live connectivity and battery state. A host that does not
+recognise these characteristics ignores them and keeps working as a KBP 1.0
+host.
+
+### 14.1 Scope & version
+
+- **KBP MAJOR**: 1 (service UUID `AA440AA0-F5ED-4C48-84A1-8062D20D3D55` **unchanged**).
+- **KBP MINOR**: bumped to **1.1**.
+- **Breaking changes**: none. The KBP 1.0 characteristic `AA440AA1-…` is **unchanged**.
+- Backward-compatibility guarantees:
+  - A KBP 1.0 host (subscribes to `AA440AA1-…` only) connecting to a KBP 1.1
+    keyboard → the 1.1 characteristics are not subscribed, firmware emits no
+    notifications on them, and the behaviour degrades cleanly to 1.0.
+  - A KBP 1.1 host connecting to a KBP 1.0 keyboard → GATT discovery does not
+    find the new characteristics, the host MUST **hide the entire 1.1 UI**,
+    and all other behaviour is identical to 1.0.
+
+### 14.2 The two new characteristics
+
+| Item | Connectivity characteristic | Battery characteristic |
+|------|------------------------------|------------------------|
+| UUID | `AA440AA2-F5ED-4C48-84A1-8062D20D3D55` | `AA440AA3-F5ED-4C48-84A1-8062D20D3D55` |
+| Properties | `READ` \| `NOTIFY` | `READ` \| `NOTIFY` |
+| Descriptor | Client Characteristic Configuration (CCC, `0x2902`) | Client Characteristic Configuration (CCC, `0x2902`) |
+| Carries | all state-ish fields + capability bits | battery percent (overall or per half) |
+| notify throttling | emit-on-change (state-ish) | ≥ 1 pp change **OR** ≥ 1 s since last emit (numeric) |
+| Optional | yes — whole characteristic MAY be absent if firmware implements no 1.1 optional fields | yes — whole characteristic MAY be absent if firmware does not report battery |
+
+Both characteristics live under the **same** primary service as KBP 1.0
+(`AA440AA0-…`); the producer MUST NOT introduce a new service for 1.1.
+
+### 14.3 Connectivity characteristic payload
+
+#### 14.3.1 Layout (little-endian, **fixed length ≥ 7 bytes**)
+
+| Offset | Size | Field | Range / encoding |
+|--------|------|-------|------------------|
+| `[0]` | 1 | `capability_bits` | uint8, per-bit meaning in §14.3.2 |
+| `[1]` | 1 | `host_state` | bit 0: `connected`; bits 1–2: `last_disconnect_reason` (0 unknown / 1 explicit / 2 timeout / 3 reserved); bits 3–7 reserved (1.1 firmware MUST emit 0) |
+| `[2]` | 1 | `profile_index` | bits 0–6: 1-based index (0 = field not applicable); bit 7: `profile_open` (1 = open, waiting-to-pair) |
+| `[3]` | 1 | `profile_max_slots` | uint8, firmware-declared max slot count (0 = field not applicable) |
+| `[4]` | 1 | `split_link_flags` | bit 0: left_online; bit 1: right_online; bits 2–7 reserved (1.1 MUST emit 0) |
+| `[5]` | 1 | `output_endpoint` | 0 = unknown / 1 = USB / 2 = BLE / 3–255 reserved (future use) |
+| `[6]` | 1 | `charging_flags` | bit 0: left_charging (overall when `is_split = 0`, **requires** `has_left_charging = 1`); bit 1: right_charging (**requires** `is_split = 1` **and** `has_right_charging = 1`; firmware MUST emit 0 when `is_split = 0`); bits 2–7 reserved |
+| `[7..N]` | ≥ 0 | reserved trailing bytes | future MINOR fields; **producer** emits 0 bytes in 1.1 (payload is exactly 7 bytes); **consumer** MUST ignore the tail |
+
+#### 14.3.2 `capability_bits` (byte 0)
+
+| Bit | Mask | Name | Meaning |
+|-----|------|------|---------|
+| 0 | `0x01` | `is_split` | the keyboard is a split (ZMK reference binds to `CONFIG_ZMK_SPLIT`) |
+| 1 | `0x02` | `has_host_connection` | `host_state` field is meaningful |
+| 2 | `0x04` | `has_profile` | `profile_index` + `profile_max_slots` are meaningful |
+| 3 | `0x08` | `has_split_link` | `split_link_flags` is meaningful; **requires** bit 0 = 1 |
+| 4 | `0x10` | `has_output_endpoint` | `output_endpoint` is meaningful |
+| 5 | `0x20` | `has_left_charging` | `charging_flags.bit 0` is meaningful (overall when integer board) |
+| 6 | `0x40` | `has_right_charging` | `charging_flags.bit 1` is meaningful; **requires** bit 0 = 1 (`is_split = 1`); firmware MUST emit 0 when `is_split = 0` |
+| 7 | `0x80` | reserved | 1.1 firmware MUST emit 0 |
+
+#### 14.3.3 Producer invariants (firmware MUST)
+
+- **P-C1**: if `has_split_link = 1`, then `is_split = 1`.
+- **P-C2**: for any field whose capability bit = 0, firmware MAY emit 0 bytes; consumers MUST ignore the specific value.
+- **P-C3**: `profile_index` bits 0–6 ≤ `profile_max_slots` (index MUST NOT be out of range).
+- **P-C4**: 1.1 firmware MUST emit 0 for all reserved positions (byte 1 bits 3–7, byte 4 bits 2–7, byte 6 bits 2–7, byte 0 bit 7, byte 7+).
+- **P-C5**: if `has_right_charging = 1`, then `has_left_charging = 1` **and** `is_split = 1`; on an integer board (`is_split = 0`), both `has_right_charging` and `charging_flags.bit 1` MUST be 0.
+
+#### 14.3.4 Consumer rules (host MUST)
+
+- **C-C1**: payload length **< 7 bytes** → drop entire frame, log a structured diagnostic, do **not** update UI.
+- **C-C2**: payload length **≥ 7 bytes** → consume bytes 0..6, ignore bytes 7+ (ensures MINOR forward-compatibility).
+- **C-C3**: if `capability_bits.has_split_link = 1` but `is_split = 0`, host MUST treat `has_split_link` as 0 (firmware bug) and log a `capability.inconsistent` diagnostic.
+- **C-C4**: if `profile_index` bits 0–6 > `profile_max_slots`, host MUST clamp the UI-displayed index to `profile_max_slots` and log a `profile.out_of_range` diagnostic.
+- **C-C5**: for `output_endpoint` reserved values 3–255, host MUST display "unknown endpoint (0x__)" rather than crashing.
+- **C-C6**: if `has_right_charging = 1` but `is_split = 0`, host MUST treat `has_right_charging` as 0 (firmware bug), log a `capability.inconsistent` diagnostic, and MUST NOT render the right-half charging icon.
+- **C-C7**: if `has_left_charging = 0` but `charging_flags.bit 0` is non-zero, host MUST ignore the bit value and log a `capability.inconsistent` diagnostic (bit 1 similarly).
+
+#### 14.3.5 Notify throttling (producer MUST)
+
+- Any state-ish bit flip or enum value change → notify the current snapshot **immediately**.
+- Inherit KBP 1.0 §5 "snapshot-unchanged suppression": firmware MUST suppress notification when the recomputed snapshot equals the last-sent snapshot byte-for-byte.
+
+### 14.4 Battery characteristic payload
+
+#### 14.4.1 Layout (little-endian, **length varies with `is_split`**)
+
+| Case (from `capability_bits.is_split`) | payload length | bytes |
+|------|------|------|
+| `is_split = 0` (integer board) | **1 byte** | `[0]` = `overall_battery_percent` (uint8) |
+| `is_split = 1` (split) | **2 bytes** | `[0]` = `left_battery_percent`, `[1]` = `right_battery_percent` (each uint8) |
+
+#### 14.4.2 Battery percent (uint8 encoding)
+
+| Value range | Meaning |
+|------|------|
+| `0..100` | normal percent |
+| `101..254` | reserved |
+| `255` | sentinel: read failed / temporarily unavailable (e.g., brief I²C loss) |
+
+#### 14.4.3 Producer invariants (firmware MUST)
+
+- **P-B1**: payload length strictly matches `is_split` (do not emit 0 bytes, do not emit 3+ bytes).
+- **P-B2**: firmware **passes raw readings through**; MUST NOT perform smoothing / sliding average at the firmware layer, to prevent masking a transient failure as a "normal low battery".
+- **P-B3**: if firmware cannot report battery at all → the entire Battery characteristic MUST NOT be exposed (GATT discovery simply doesn't find it).
+
+#### 14.4.4 Consumer rules (host MUST)
+
+- **C-B1**: if `capability_bits.is_split = 0` and payload ≠ 1 byte → drop and log `battery.length_mismatch`.
+- **C-B2**: if `is_split = 1` and payload ≠ 2 bytes → drop and log `battery.length_mismatch`.
+- **C-B3**: byte value ∈ [0, 100] → display percent; = 255 → display "read failed"; 101–254 → display "read failed" and log `battery.out_of_range`.
+- **C-B4**: host MAY apply a ≤ 3 s sliding average to the rendered value, but MUST NOT affect SC-003 judgement (i.e., diagnostic logs preserve the raw byte).
+
+#### 14.4.5 Notify throttling (producer MUST)
+
+Numeric-field throttling, **OR** relation:
+
+- Condition A: raw byte value changes by ≥ 1 relative to last-sent (i.e., ≥ 1 percentage point).
+- Condition B: ≥ 1 second has elapsed since this field was last notified.
+
+**A ∨ B** holds → notify. Inherit KBP 1.0 §5 "snapshot-unchanged suppression" (byte-for-byte identical snapshots suppress notification).
+
+### 14.5 Discovery & subscription (consumer flow)
+
+- Service discovery remains per KBP 1.0 §2: enumerate connected peripherals via `retrieveConnectedPeripherals(withServices: [HID, KBPService])`, confirm `AA440AA0-…` present over GATT.
+- After the service is confirmed, consumers MUST request discovery of **all** characteristics under that service and determine the keyboard's declared KBP MINOR from characteristic UUID **presence**:
+  - Only `AA440AA1-…` found → 1.0 only; consumer MUST NOT render 1.1 UI.
+  - `AA440AA1-…` + `AA440AA2-…` found → 1.1 Connectivity fields are supported; also check `AA440AA3-…` to decide battery UI.
+  - `AA2` found but `AA1` missing → anomaly; host MUST log `discovery.anomaly` and fall back to 1.0-only behaviour (never trust 1.1 fields on an incompatible wire).
+- On every reconnect, consumer MUST re-READ and re-CCC-subscribe each new characteristic it had previously subscribed to.
+
+### 14.6 Version signal & upgrade path
+
+- Unchanged service UUID means KBP 1.0 / 1.1 are **wire-detectably equivalent**; MINOR distinction is determined by characteristic presence.
+- Future KBP 1.2+ MUST follow the same strategy: **append new characteristics** or **append reserved trailing bytes to Connectivity** (per README §9 MINOR rule).
+- Any change that reinterprets existing byte positions or modifies UUIDs is **MAJOR** and MUST follow the service-UUID-replacement path.
+
+### 14.7 Extension of the §10 conformance checklist
+
+This section introduces the following new conformance items (implemented in
+`conformance/checklist.md` as C7–C12; see `conformance/CONFORMANCE.md`):
+
+- **C7**: if `AA440AA2-…` is present → properties = `READ`+`NOTIFY`, with CCC.
+- **C8**: Connectivity READ returns ≥ 7 bytes; each field satisfies §14.3 and invariants P-C1..P-C5.
+- **C9**: if `AA440AA3-…` is present → properties = `READ`+`NOTIFY`, with CCC, and payload length matches `is_split`.
+- **C10**: state-ish field changes trigger NOTIFY; snapshot-unchanged suppression applies.
+- **C11**: numeric-field throttling satisfies §14.4.5 (≥ 1 pp **OR** ≥ 1 s, OR relation).
+- **C12**: 1.1 characteristics are exposed only by the central role of a split keyboard (extends §8.4 "feature from central only" to 1.1).
+
+### 14.8 Firmware reference mapping (non-normative, ZMK)
+
+| KBP 1.1 field | ZMK reference source |
+|------|------|
+| `is_split` bit | `IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)` |
+| `host_state.connected` | `zmk_ble_active_profile_is_connected()` + subscribe `zmk_ble_active_profile_changed` |
+| `profile_index` + `profile_open` + `profile_max_slots` | `zmk_ble_active_profile_index()`, `zmk_ble_active_profile_is_open()`, `ZMK_BLE_PROFILE_COUNT` |
+| `split_link_flags` | subscribe `zmk_split_bt_peripheral_status_changed`; read `zmk_split_bt_peripherals_connected()` |
+| `output_endpoint` | subscribe `zmk_endpoint_changed`; read `zmk_endpoints_selected()` (map USB_HID → 1, BLE → 2) |
+| `charging_flags.bit 0` (`has_left_charging`) | optional board-local charger GPIO (overall when integer board; most boards do not implement) |
+| `charging_flags.bit 1` (`has_right_charging`) | optional peripheral-side charger GPIO reported via split sync bus (split central only) |
+| `overall_battery` / `left_battery` / `right_battery` | subscribe `zmk_battery_state_changed` + `zmk_peripheral_battery_state_changed`; central-side aggregation |
+
+API names may evolve across ZMK releases; the implementation phase (`zmk-keybeacon` module) MUST verify against ZMK main at build time.
+
 ---
 
 # KeyBeacon 协议（KBP）— 中文版
 
-**English** · [中文](#zh-kbp)
+[English](#en-kbp) · **中文**
 
 <a id="zh-kbp"></a>
 
-**版本**：1.0.0 · **许可**：MIT · **状态**：已发布标准
+**版本**：1.1.0 · **许可**：MIT · **状态**：已发布标准
 
 > **本文档是什么**：KeyBeacon 是一个开放的、与实现无关的协议。通过该协议，键盘可将**主机无法直接
 > 获知的活跃内部状态**——当前激活的层与按住的修饰键——通过 BLE 上报给桌面应用。本文档是该接口的
@@ -368,6 +545,171 @@ MAJOR 版本信号。
 
 ## §13. 变更日志
 
+- **1.1.0** — KBP 1.1（MINOR）：新增两个可选特征 `AA440AA2-…`（Connectivity：能力位 +
+  主机状态 + profile + 分体链路 + 输出端点 + 按半充电位）与 `AA440AA3-…`（Battery：
+  整板或按半电量百分比）；服务 UUID 与 `AA440AA1-…` 载荷均**不变**。详见 §14 与
+  `CHANGELOG.md` 1.1.0。
 - **1.0.0** — 初始 KeyBeacon 协议：BLE GATT 服务/特征、基于服务 UUID 的身份识别、GAP 名称
   身份、`[layer_index][mods][layer_name]` 载荷、带变化抑制的 READ/NOTIFY、一致性检查清单，以及
   基于 UUID 的 MAJOR 版本控制。整合了 feature-001 状态快照合约与 feature-002 发现与身份修正。
+
+## §14. KBP 1.1 连接与电量（可选特征）
+
+**KBP 1.1（MINOR）新增**。服务 UUID 保持 `AA440AA0-…` 不变；KBP 1.0 的特征 `AA440AA1-…`
+**完全不动**。KBP 1.1 引入**两个新的可选特征**，键盘 可 暴露它们以描述其实时连接与电量
+状态。不识别这两个特征的主机忽略它们并继续按 KBP 1.0 主机工作。
+
+### §14.1 范围与版本
+
+- **KBP MAJOR**：1（服务 UUID `AA440AA0-F5ED-4C48-84A1-8062D20D3D55` **不变**）。
+- **KBP MINOR**：升至 **1.1**。
+- **破坏性变更**：无。KBP 1.0 的特征 `AA440AA1-…` **不变**。
+- 向后兼容保证：
+  - KBP 1.0 主机（只订阅 `AA440AA1-…`）连接 KBP 1.1 键盘 → 新特征未被订阅，固件不在
+    其上发出通知，行为完全退化为 1.0。
+  - KBP 1.1 主机连接 KBP 1.0 键盘 → GATT 发现找不到新特征，主机 必须 **整张隐藏 1.1
+    UI**，其他行为与 1.0 完全一致。
+
+### §14.2 两个新特征
+
+| 项 | Connectivity 特征 | Battery 特征 |
+|---|------------------|-------------|
+| UUID | `AA440AA2-F5ED-4C48-84A1-8062D20D3D55` | `AA440AA3-F5ED-4C48-84A1-8062D20D3D55` |
+| 属性 | `READ` \| `NOTIFY` | `READ` \| `NOTIFY` |
+| 描述符 | 客户端特征配置（CCC，`0x2902`） | 客户端特征配置（CCC，`0x2902`） |
+| 承载 | 所有状态性字段 + 能力位 | 电量百分比（整板或按半） |
+| notify 节流 | 变即发（状态性） | 变化 ≥ 1 pp **或** 距上次 ≥ 1 秒（数值性） |
+| 可选 | 是——若固件不实现任何 1.1 可选字段，整个特征 可 缺省 | 是——若固件不上报电量，整个特征 可 缺省 |
+
+两个特征均位于 KBP 1.0 **同一个** 主服务 `AA440AA0-…` 下；生产者 必须 不新增 service。
+
+### §14.3 Connectivity 特征载荷
+
+#### §14.3.1 布局（小端序，**固定长度 ≥ 7 字节**）
+
+| 偏移 | 大小 | 字段 | 范围 / 编码 |
+|------|-----|-----|------------|
+| `[0]` | 1 | `capability_bits` | uint8，每位含义见 §14.3.2 |
+| `[1]` | 1 | `host_state` | bit 0: `connected`；bits 1–2: `last_disconnect_reason`（0 未知 / 1 主动 / 2 超时 / 3 保留）；bits 3–7 保留（1.1 固件 必须 发 0） |
+| `[2]` | 1 | `profile_index` | bits 0–6: 1 起索引（0 = 字段不适用）；bit 7: `profile_open`（1 = open 待配对） |
+| `[3]` | 1 | `profile_max_slots` | uint8，固件声明的最大槽位数（0 = 字段不适用） |
+| `[4]` | 1 | `split_link_flags` | bit 0: left_online；bit 1: right_online；bits 2–7 保留（1.1 必须 发 0） |
+| `[5]` | 1 | `output_endpoint` | 0 = 未知 / 1 = USB / 2 = BLE / 3–255 保留（预留未来扩展） |
+| `[6]` | 1 | `charging_flags` | bit 0: left_charging（`is_split = 0` 时为整板，**要求** `has_left_charging = 1`）；bit 1: right_charging（**要求** `is_split = 1` **且** `has_right_charging = 1`；整板时固件 必须 发 0）；bits 2–7 保留 |
+| `[7..N]` | ≥ 0 | 保留尾部字节 | 未来 MINOR 的追加字段；**生产者** 在 1.1 发 0 字节（即载荷恰为 7 字节）；**消费者** 必须 忽略尾部 |
+
+#### §14.3.2 `capability_bits`（byte 0）
+
+| 位 | 掩码 | 名称 | 含义 |
+|----|------|------|------|
+| 0 | `0x01` | `is_split` | 该键盘为分体（ZMK 参考实现绑定 `CONFIG_ZMK_SPLIT`） |
+| 1 | `0x02` | `has_host_connection` | `host_state` 字段有效 |
+| 2 | `0x04` | `has_profile` | `profile_index` + `profile_max_slots` 有效 |
+| 3 | `0x08` | `has_split_link` | `split_link_flags` 有效；**要求** bit 0 = 1 |
+| 4 | `0x10` | `has_output_endpoint` | `output_endpoint` 有效 |
+| 5 | `0x20` | `has_left_charging` | `charging_flags.bit 0` 有效（整板时为 overall） |
+| 6 | `0x40` | `has_right_charging` | `charging_flags.bit 1` 有效；**要求** bit 0 = 1（`is_split = 1`）；整板时固件 必须 发 0 |
+| 7 | `0x80` | 保留 | 1.1 固件 必须 发 0 |
+
+#### §14.3.3 生产者不变量（固件 必须 保证）
+
+- **P-C1**：若 `has_split_link = 1`，则 `is_split = 1`。
+- **P-C2**：对任一能力位 = 0 的字段，固件 可 填 0 字节；消费者 必须 忽略该字段的具体值。
+- **P-C3**：`profile_index` bits 0–6 ≤ `profile_max_slots`（索引 必须 不越界）。
+- **P-C4**：1.1 固件 必须 把保留位全部发 0（byte 1 bits 3–7、byte 4 bits 2–7、byte 6 bits 2–7、byte 0 bit 7、byte 7+）。
+- **P-C5**：若 `has_right_charging = 1`，则 `has_left_charging = 1` **且** `is_split = 1`；整板键盘（`is_split = 0`）下 `has_right_charging` 必须 = 0 且 `charging_flags.bit 1` 必须 = 0。
+
+#### §14.3.4 消费者规则（主机 必须 保证）
+
+- **C-C1**：载荷长度 **< 7 字节** → 整条丢弃，记一次结构化诊断日志，**不** 更新 UI。
+- **C-C2**：载荷长度 **≥ 7 字节** → 消费 byte 0..6，忽略 byte 7+（保证 MINOR 向上兼容）。
+- **C-C3**：若 `capability_bits.has_split_link = 1` 但 `is_split = 0`，主机 必须 把 `has_split_link` 当作 0（视为固件 bug），记一次 `capability.inconsistent` 诊断日志。
+- **C-C4**：若 `profile_index` bits 0–6 > `profile_max_slots`，主机 必须 把 UI 显示的 index 钳制在 `profile_max_slots` 并记一次 `profile.out_of_range` 诊断日志。
+- **C-C5**：对 `output_endpoint` 的 3–255 保留值，主机 必须 显示为"未知端点（0x__）"而非崩溃。
+- **C-C6**：若 `has_right_charging = 1` 但 `is_split = 0`，主机 必须 把 `has_right_charging` 当作 0（视为固件 bug），记一次 `capability.inconsistent` 诊断日志，且 必须 不渲染右半充电图标。
+- **C-C7**：若 `has_left_charging = 0` 但 `charging_flags.bit 0` 非 0，主机 必须 忽略该位值并记一次 `capability.inconsistent` 诊断日志（bit 1 同理）。
+
+#### §14.3.5 Notify 节流（生产者 必须 保证）
+
+- 状态性字段的任一比特翻转或枚举值变化 → **立即** notify 当前 snapshot。
+- 继承 KBP 1.0 §5 "snapshot 未变不发" 抑制规则：固件 必须 在重新计算的 snapshot 与上次发送的 snapshot 字节相等时**抑制**通知。
+
+### §14.4 Battery 特征载荷
+
+#### §14.4.1 布局（小端序，**长度随 `is_split`**）
+
+| 情形（来自 `capability_bits.is_split`） | 载荷长度 | 字节 |
+|------|------|------|
+| `is_split = 0`（整板） | **1 字节** | `[0]` = `overall_battery_percent`（uint8） |
+| `is_split = 1`（分体） | **2 字节** | `[0]` = `left_battery_percent`，`[1]` = `right_battery_percent`（各 uint8） |
+
+#### §14.4.2 电量取值（uint8 编码）
+
+| 值范围 | 含义 |
+|------|------|
+| `0..100` | 正常百分比 |
+| `101..254` | 保留 |
+| `255` | sentinel：读取失败 / 临时不可用（例如 I²C 短暂失联） |
+
+#### §14.4.3 生产者不变量（固件 必须 保证）
+
+- **P-B1**：载荷长度与 `is_split` 严格一致（不发 0 字节、不发 3 字节以上）。
+- **P-B2**：固件 **透传原始读数**；必须 不在固件层做滑动平均 / 平滑，以防把"读取瞬时失败"洗成"正常低电"。
+- **P-B3**：若固件整体无法上报电量 → 整个 Battery 特征 必须 不实现（GATT 发现时不出现）。
+
+#### §14.4.4 消费者规则（主机 必须 保证）
+
+- **C-B1**：若 `capability_bits.is_split = 0` 而载荷 ≠ 1 字节 → 丢弃并记 `battery.length_mismatch`。
+- **C-B2**：若 `is_split = 1` 而载荷 ≠ 2 字节 → 丢弃并记 `battery.length_mismatch`。
+- **C-B3**：字节值 ∈ [0, 100] → 显示百分比；= 255 → 显示 "读取失败"；101–254 → 显示 "读取失败" 并记 `battery.out_of_range`。
+- **C-B4**：主机 可 对渲染值做 ≤ 3 秒的滑动平均作为抖动平滑，必须 不影响 SC-003 判定（即诊断日志中保留原始字节）。
+
+#### §14.4.5 Notify 节流（生产者 必须 保证）
+
+数值性字段节流规则，**或** 关系触发：
+
+- 条件 A：相对上一次已发送的字节值变化 ≥ 1（即 ≥ 1 个百分点）。
+- 条件 B：距上一次该字段 notify 已 ≥ 1 秒。
+
+**A ∨ B** 成立 → notify。继承 KBP 1.0 §5 的 "snapshot 未变不发" 规则（即原始字节完全相等时不触发）。
+
+### §14.5 发现与订阅（消费者流程）
+
+- 服务发现仍按 KBP 1.0 §2：通过 `retrieveConnectedPeripherals(withServices: [HID, KBPService])` 枚举已连接外设，GATT 中确认 `AA440AA0-…` 服务存在。
+- 服务存在后，消费者 必须 请求发现 service 下 **所有** characteristics，根据各 UUID 的 **存在性** 判定键盘声称支持的 KBP MINOR：
+  - 只找到 `AA440AA1-…` → 1.0 only；消费者 必须 不展示 1.1 UI。
+  - 找到 `AA440AA1-…` 和 `AA440AA2-…` → 支持 1.1 Connectivity 字段；再按 `AA440AA3-…` 是否存在决定电量 UI。
+  - 找到 `AA2` 但 `AA1` 缺失 → 异常；主机 必须 记 `discovery.anomaly` 并按 1.0-only 行为处理（永不裸信任 1.1 字段）。
+- 消费者 必须 对已订阅的每个新特征在重连时 **重新** READ + CCC subscribe。
+
+### §14.6 版本信号与升级路径
+
+- 服务 UUID 不变意味着 KBP 1.0 / 1.1 **wire 可识别性等价**；MINOR 判定靠 characteristic 存在性。
+- 未来 KBP 1.2+ 必须 继续按本契约的 "**追加 characteristic** 或 **在 Connectivity 的保留尾部字节中追加**" 策略推进（README §9 MINOR 规则）。
+- 任何涉及重新解释 byte 位置 / 修改 UUID 的变更一律 **MAJOR**，必须 走 service UUID 替换路径。
+
+### §14.7 与 §10 一致性清单的扩展
+
+本节对应的新增一致性条目（在 `conformance/checklist.md` 落实为 C7–C12；见 `conformance/CONFORMANCE.md`）：
+
+- **C7**：`AA440AA2-…` 若存在：properties = `READ`+`NOTIFY`，带 CCC。
+- **C8**：Connectivity READ 返回 ≥ 7 字节，各字段符合 §14.3 与不变量 P-C1..P-C5。
+- **C9**：`AA440AA3-…` 若存在：properties = `READ`+`NOTIFY`，带 CCC，且载荷长度与 `is_split` 一致。
+- **C10**：状态性字段变化触发 NOTIFY；snapshot 未变抑制继续生效。
+- **C11**：数值性字段节流符合 §14.4.5（≥ 1 pp **或** ≥ 1 s，或 关系）。
+- **C12**：1.1 新特征仅在分体键盘的 central 角色实现（§8.4 "feature 仅从 central 暴露" 规则延伸到 1.1）。
+
+### §14.8 固件参考映射（非规范性，ZMK）
+
+| KBP 1.1 字段 | ZMK 参考源 |
+|-------------|-----------|
+| `is_split` 位 | `IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)` |
+| `host_state.connected` | `zmk_ble_active_profile_is_connected()` + 订阅 `zmk_ble_active_profile_changed` |
+| `profile_index` + `profile_open` + `profile_max_slots` | `zmk_ble_active_profile_index()`、`zmk_ble_active_profile_is_open()`、`ZMK_BLE_PROFILE_COUNT` |
+| `split_link_flags` | 订阅 `zmk_split_bt_peripheral_status_changed`；读 `zmk_split_bt_peripherals_connected()` |
+| `output_endpoint` | 订阅 `zmk_endpoint_changed`；读 `zmk_endpoints_selected()`（映射 USB_HID → 1，BLE → 2） |
+| `charging_flags.bit 0`（`has_left_charging`） | 可选：板级 charger GPIO（整板时为 overall；多数板不实现） |
+| `charging_flags.bit 1`（`has_right_charging`） | 可选：peripheral 侧 charger GPIO 经分体同步总线上报（仅 split central 需要） |
+| `overall_battery` / `left_battery` / `right_battery` | 订阅 `zmk_battery_state_changed` + `zmk_peripheral_battery_state_changed`；central 侧聚合 |
+
+API 名随 ZMK 版本可能有变；实施阶段（`zmk-keybeacon` 外部模块）必须 核对当前 ZMK main 分支的实际符号。

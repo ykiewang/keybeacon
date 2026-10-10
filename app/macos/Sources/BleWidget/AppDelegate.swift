@@ -19,7 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         AppSettings().migrateIfNeeded()
 
         panel = FloatingPanel()
-        panel.orderFrontRegardless()
+        if AppSettings().panelVisible {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
 
         statusItem = NSStatusBar.system.statusItem(
             withLength: NSStatusItem.variableLength
@@ -81,12 +85,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         menu.addItem(
             NSMenuItem(title: "重连", action: #selector(reconnect), keyEquivalent: "r")
         )
+
+        // Panel visibility toggle (persisted). Checkmark reflects current state.
+        let showPanelItem = NSMenuItem(
+            title: "显示浮窗",
+            action: #selector(togglePanelVisible), keyEquivalent: ""
+        )
+        showPanelItem.target = self
+        showPanelItem.state = AppSettings().panelVisible ? .on : .off
+        menu.addItem(showPanelItem)
+
         menu.addItem(
             NSMenuItem(
                 title: "锁定 / 穿透",
                 action: #selector(toggleLock), keyEquivalent: "l"
             )
         )
+
+        // "Pin to corner" submenu — anchors the panel to a visible-frame
+        // corner of its current screen so it never drifts when the user
+        // switches active window to another display.
+        let pinChooser = NSMenuItem(title: "钉到角落", action: nil, keyEquivalent: "")
+        let pinSubmenu = NSMenu()
+        let currentPin = panel.pinnedCorner
+
+        let offItem = NSMenuItem(
+            title: "关闭（记忆位置）",
+            action: #selector(setPinOff), keyEquivalent: ""
+        )
+        offItem.target = self
+        offItem.state = (currentPin == nil) ? .on : .off
+        pinSubmenu.addItem(offItem)
+        pinSubmenu.addItem(.separator())
+
+        for corner in PinnedCorner.allCases {
+            let item = NSMenuItem(
+                title: corner.displayName,
+                action: #selector(setPinCorner(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = corner.rawValue
+            item.state = (currentPin == corner) ? .on : .off
+            pinSubmenu.addItem(item)
+        }
+        pinChooser.submenu = pinSubmenu
+        menu.addItem(pinChooser)
+
+        // "Display mode" submenu — 完整 (multi-row card) / 精简 (single-row).
+        let modeChooser = NSMenuItem(title: "显示模式", action: nil, keyEquivalent: "")
+        let modeSubmenu = NSMenu()
+        let currentMode = panel.displayMode
+        for mode in DisplayMode.allCases {
+            let item = NSMenuItem(
+                title: mode.displayName,
+                action: #selector(setDisplayMode(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = (currentMode == mode) ? .on : .off
+            modeSubmenu.addItem(item)
+        }
+        modeChooser.submenu = modeSubmenu
+        menu.addItem(modeChooser)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
@@ -122,6 +183,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         panel.isLocked.toggle()
     }
 
+    @objc private func togglePanelVisible() {
+        let settings = AppSettings()
+        let next = !settings.panelVisible
+        settings.panelVisible = next
+        if next {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
+        buildMenu()
+    }
+
+    @objc private func setPinOff() {
+        panel.pinnedCorner = nil
+        buildMenu()
+    }
+
+    @objc private func setPinCorner(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let corner = PinnedCorner(rawValue: raw)
+        else { return }
+        panel.pinnedCorner = corner
+        buildMenu()
+    }
+
+    @objc private func setDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = DisplayMode(rawValue: raw)
+        else { return }
+        panel.displayMode = mode
+        buildMenu()
+    }
+
     @objc private func selectKeyboard(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         client.select(id)
@@ -140,6 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         updateMenuBarIcon()
         if newState != .connected {
             panel.update(.disconnected)
+            panel.markConnectivityStaleOnDisconnect()
         }
     }
 
@@ -160,5 +255,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         unsupportedKeyboards = keyboards
         statusItem.button?.toolTip = "检测到不受支持的 KeyBeacon 协议版本;请升级本应用。"
         buildMenu()
+    }
+
+    func bleClient(_ client: BLEClient, didDetermineKBPMinor minor: KBPMinor) {
+        // IV-X1 / U-5: hide the entire 1.1 card when the keyboard is KBP 1.0.
+        switch minor {
+        case .onePointZero, .unknown:
+            panel.setConnectivityCardVisible(false)
+        case .onePointOne:
+            panel.setConnectivityCardVisible(true)
+        }
+    }
+
+    func bleClient(_ client: BLEClient, didUpdateConnectivity status: ConnectivityStatus) {
+        panel.update(connectivity: status)
+    }
+
+    func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {
+        panel.update(battery: status)
     }
 }
