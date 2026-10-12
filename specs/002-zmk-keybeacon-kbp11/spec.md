@@ -150,3 +150,13 @@ A keyboard author who does **not** want the 1.1 characteristics (for binary-size
 - **Reference hardware**: the user's **Corne** on `feat/keybeacon` (nice_nano_v2 central + puchi_ble_v1 peripheral per `build.yaml`, with nice_epaper displays) is the primary verification target. One central image is enough — US2's peripheral-battery path is observable from the central.
 - **Backward-compat scope**: FR-G1 guarantees the v1.0 wire is byte-identical. If the user later ships a KBP 1.1 host **and** a v1.0.0-pinned firmware simultaneously, the 1.1 UI is correctly hidden on the host side (verified by host-side spec `001-connectivity-power` FR-002 / `research.md §11` compatibility matrix).
 - **Tag discipline**: no `v1.1.0` tag is pushed until SC-001 through SC-005 all pass on real Corne hardware. Interim verification uses a relative-path `west.yml` override on the user's corne config (temporary; never committed).
+
+
+## Follow-up: upgrade to v1.1.4 (feature 003)
+
+v1.1.4 ships the **ZMK revision compatibility contract** — see
+[`specs/003-zmk-revision-pinning/`](../003-zmk-revision-pinning/spec.md). The 002
+consumer-side workaround (`CONFIG_ZMK_KEYBEACON_CHAR_CONNECTIVITY=n` in
+`totem_left.conf`) can be removed starting from v1.1.4; see
+[`upgrade-notes.md`](./upgrade-notes.md) in this directory for the three-step
+migration (bump west.yml → delete workaround → rebuild).

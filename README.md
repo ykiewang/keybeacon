@@ -59,6 +59,11 @@ spec time. These are candidates, not commitments.
 > firmware module: [`zmk-keybeacon@v1.1.2`](https://github.com/ykiewang/zmk-keybeacon/releases/tag/v1.1.2)
 > ([CHANGELOG](https://github.com/ykiewang/zmk-keybeacon/blob/main/CHANGELOG.md));
 > normative wire contract: [`protocol/README.md §14`](protocol/README.md#14-kbp-11-connectivity--power-optional).
+>
+> **Follow-up patch**: v1.1.4 — ZMK revision compatibility contract (shipped).
+> Spec: [`specs/003-zmk-revision-pinning/`](specs/003-zmk-revision-pinning/);
+> firmware tag: `zmk-keybeacon@v1.1.4` (fail-fast against ZMK API drift, no wire
+> change); consumer migration: [`specs/002-zmk-keybeacon-kbp11/upgrade-notes.md`](specs/002-zmk-keybeacon-kbp11/upgrade-notes.md).
 
 | Metric | Status | Why it helps a screenless split | ZMK feasibility | Protocol impact |
 |--------|--------|---------------------------------|-----------------|-----------------|
