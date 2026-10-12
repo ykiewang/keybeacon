@@ -101,6 +101,16 @@ on newer ZMK but break older ZMK) and is **not merged**; kept as an
 investigation record. See spec Clarifications § Session 2026-10-12 for the
 full reasoning trail.
 
+**Upstream branch state note.** When starting feature 003 the repo's `main`
+HEAD was `6c15918`, which is two commits behind the `v1.1.3` tag (`cbfe34f`):
+the v1.1.3 release was tagged on a chain (`6c15918 → e4dc6a5 → cbfe34f`) that
+never got fast-forwarded back to `main`. `feat/compat-contract-v1.1.4` was
+branched off **`v1.1.3`** rather than `main`, so merging this PR will
+simultaneously bring `main` up to v1.1.3 **and** add v1.1.4 — no separate
+catch-up PR is needed. Reviewers can confirm with
+`git log main..v1.1.3 --oneline` (2 commits) and `git log v1.1.3..main`
+(empty).
+
 ## Testing
 
 - Local: `pytest scripts/tests/` → 23 passed

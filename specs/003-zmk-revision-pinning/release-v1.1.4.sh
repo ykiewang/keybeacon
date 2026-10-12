@@ -13,6 +13,14 @@ set -euo pipefail
 cd "$(dirname "$0")/../../zmk-keybeacon"
 
 # 1. Verify we're on main at the exact merge commit of the compat-contract PR.
+#    NOTE on upstream state: at feature-003 time, main HEAD was 6c15918 which
+#    is TWO commits BEHIND v1.1.3 (cbfe34f + e4dc6a5). v1.1.3 was tagged on a
+#    chain that was never fast-forwarded back to main. feat/compat-contract-v1.1.4
+#    was branched off v1.1.3 so it correctly includes everything in v1.1.3 plus
+#    the 003 compat-contract work. When merging this PR, make sure the PR brings
+#    main up to v1.1.3 before adding v1.1.4 (i.e. merging the feature branch is
+#    enough — it carries the 2 lost commits with it; no separate catch-up PR
+#    needed).
 echo "[1/6] current branch:"
 git branch --show-current
 echo "    HEAD:"
