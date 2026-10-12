@@ -11,3 +11,9 @@ dist/
 
 # macOS
 .DS_Store
+
+# Spec Kit 工作过程快照（本地备份，不入仓库）
+.backup-*/
+
+# CodeFlicker CLI 本地状态
+.codeflicker/
