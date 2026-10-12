@@ -45,10 +45,19 @@ Three independent user stories, each independently testable:
 | | US | Deliverable | Independent test |
 |---|---|---|---|
 | 🎯 MVP | **US1** (P1) | `#ifdef` double-API bridge in `keybeacon.c:243`; CMake probe + fail-fast banner; Kconfig escape hatch | smoke-cmake.sh (4 sections) + 12 pytest cases |
-| | **US2** (P2) | Daily `zmk-main-compat.yml` matrix (`main` + `4dd95d7` + `e844eca2` × `totem_left`); auto-opened issue on cron break | regen_ci.py --check; drill via validate_compat |
+| | **US2** (P2) | Daily `zmk-main-compat.yml` **symbol-probe** matrix (`main` + `4dd95d7…` + `e844eca2…`); auto-opened issue on cron break (`compat-break` label) | regen_ci.py --check; drill via validate_compat |
 | | **US3** (P2) | Auto-generated README Compatibility table; CHANGELOG v1.1.4; 002 upgrade notes | update-readme-table.py --check |
 
-Total: 23 pytest cases + 1 shell smoke script, all green locally.
+Total: 24 pytest cases + 1 shell smoke script, all green locally and on CI.
+
+**US2 scope clarification.** The matrix verifies ZMK API **symbol stability**
+by running `check_zmk_compat.py` against each pinned ZMK clone — fast,
+board-agnostic, exactly the semantics the fail-fast banner is built around.
+It does **not** attempt a full end-to-end `west build` for a specific
+board/shield combination; that is the consuming `zmk-config` repo's job and
+the split-keyboard ecosystem is too fragmented to pick a canonical shield
+inside this module repo. See the `pivot(003)[ci]:` commit for the full
+rationale.
 
 ## Files
 
