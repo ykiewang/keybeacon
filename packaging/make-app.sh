@@ -38,7 +38,8 @@ if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
   codesign --force --deep --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$BUNDLE"
   codesign --verify --strict "$BUNDLE"
 else
-  echo "    APPLE_SIGNING_IDENTITY not set → UNSIGNED (Gatekeeper will prompt on download)"
+  echo "    APPLE_SIGNING_IDENTITY not set → ad-hoc sign (right-click Open works; no xattr needed)"
+  codesign --force --deep -s - "$BUNDLE"
 fi
 
 echo "==> package .zip / .dmg + checksums"

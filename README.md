@@ -106,10 +106,10 @@ spec time. These are candidates, not commitments.
 1. Go to the [Releases](https://github.com/ykiewang/keybeacon/releases) page and download the
    latest `BleWidget-<version>.dmg` (or `.zip`).
 2. Open the `.dmg` and drag **BleWidget.app** out (or just double-click it from the `.zip`).
-3. **First launch (important):** this build is **not yet code-signed/notarized**, so macOS
+3. **First launch (important):** this build is **ad-hoc signed** (not notarized), so macOS
    Gatekeeper blocks it on first open. **Drag BleWidget.app out of the `.dmg`** (to `/Applications`
-   or the Desktop) and **eject the disk image first** — you can't clear the quarantine flag while
-   the app sits on the read-only image. Then open it once per the workaround below.
+   or the Desktop) and **eject the disk image first**. Then right-click the app → **Open** → confirm
+   once.
 4. When prompted, **grant Bluetooth permission**. The app lives in the **menu bar** (no Dock
    icon). Connect a compatible keyboard and its live layer/modifier status appears.
 
@@ -117,24 +117,18 @@ No terminal, no build tools, no source checkout required.
 
 ### First launch: Gatekeeper workaround
 
-Signing + notarization require a paid Apple Developer ID (a pending prerequisite), so releases are
-currently **unsigned** and macOS quarantines the download. After dragging the app out of the `.dmg`
-and ejecting the image, handle whichever prompt you get:
+Notarization requires a paid Apple Developer ID (a pending prerequisite), so releases are currently
+**ad-hoc signed** and macOS quarantines the download. After dragging the app out of the `.dmg` and
+ejecting the image:
 
-- **"BleWidget can't be opened because it is from an unidentified developer"**: right-click the app
-  → **Open** → confirm once.
-- **"BleWidget is damaged and can't be opened. You should eject the disk image."** (common on Apple
-  Silicon): the right-click trick does **not** work — clear the quarantine flag once in Terminal
-  (adjust the path to where you moved the app):
+- Right-click the app → **Open** → confirm once.
+- Alternatively: **System Settings → Privacy & Security** → scroll to the blocked-app notice →
+  click **Open Anyway**.
 
-  ```
-  xattr -cr /Applications/BleWidget.app
-  ```
+You only need this the first time. A future notarized release will remove the step entirely.
 
-You only need this the first time. A future signed release will remove the step entirely.
-
-> **Known limitation this iteration**: because the artifact is unsigned, the "zero-warning,
-> double-click, under-5-minutes" goals (spec SC-001/SC-002) and signing (FR-002) are **not met
+> **Known limitation this iteration**: the artifact is ad-hoc signed but not notarized, so the
+> \"zero-warning, double-click\" goal (spec SC-001/SC-002) and notarization (FR-002) are **not met
 > yet** — they are deferred to the signed-release follow-up. Everything else (download, run,
 > live status) works today.
 
@@ -276,9 +270,9 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 1. 打开 [Releases](https://github.com/ykiewang/keybeacon/releases) 页面,下载最新的
    `BleWidget-<版本>.dmg`(或 `.zip`)。
 2. 打开 `.dmg` 把 **BleWidget.app** 拖出来(或直接从 `.zip` 里双击运行)。
-3. **首次启动(重要):** 当前构建**尚未签名/公证**,macOS Gatekeeper 会在首次打开时拦截。请**先把
-   BleWidget.app 从 `.dmg` 拖出来**(放到「应用程序」或桌面),并**先推出该磁盘映像**——app 停留在只读
-   映像里时无法清除隔离标记。然后按下方的"首次启动:绕过 Gatekeeper"操作打开一次即可。
+3. **首次启动(重要):** 当前构建为 **ad-hoc 签名**(未公证),macOS Gatekeeper 会在首次打开时
+   拦截。请**先把 BleWidget.app 从 `.dmg` 拖出来**(放到「应用程序」或桌面),并**先推出该磁盘映像**。
+   然后右键点应用 → **打开** → 确认一次即可。
 4. 按提示**授予蓝牙权限**。应用常驻**菜单栏**(无 Dock 图标)。连接一把兼容键盘,其实时的
    层/修饰键状态即会显示。
 
@@ -286,21 +280,16 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 
 ### 首次启动:绕过 Gatekeeper
 
-签名 + 公证需要付费的 Apple Developer ID(待满足的前置条件),因此当前发布产物均为**未签名**,macOS
-会给下载的 app 加上隔离标记。把 app 从 `.dmg` 拖出并推出映像后,按你看到的提示处理:
+公证需要付费的 Apple Developer ID(待满足的前置条件),因此当前发布产物为 **ad-hoc 签名**,macOS
+会给下载的 app 加上隔离标记。把 app 从 `.dmg` 拖出并推出映像后:
 
-- 若提示**"无法打开,因为来自身份不明的开发者"**:右键点应用 → **打开** → 确认一次。
-- 若提示**"'BleWidget'已损坏,无法打开。你应该推出磁盘映像。"**(Apple Silicon 上常见):右键打开在
-  这种情况下**无效**,改在「终端」里执行一次以下命令清除隔离标记(把路径改成你实际放置 app 的位置):
+- 右键点应用 → **打开** → 确认一次。
+- 或者:打开**系统设置 → 隐私与安全性** → 滚动到被阻止的 app 提示 → 点击**仍要打开**。
 
-  ```
-  xattr -cr /Applications/BleWidget.app
-  ```
+仅首次需要。将来的公证版本会彻底移除这一步。
 
-仅首次需要。将来的签名版本会彻底移除这一步。
-
-> **本期已知限制**:由于产物未签名,"零警告、双击即开、5 分钟内完成"的目标(规范 SC-001/SC-002)
-> 与签名(FR-002)**本期尚未达成** —— 它们顺延到签名版本的后续迭代。其余(下载、运行、实时状态)
+> **本期已知限制**:产物已 ad-hoc 签名但未公证,"零警告、双击即开"的目标(规范 SC-001/SC-002)
+> 与公证(FR-002)**本期尚未达成** —— 它们顺延到公证版本的后续迭代。其余(下载、运行、实时状态)
 > 今天即可用。
 
 ## 环境要求
