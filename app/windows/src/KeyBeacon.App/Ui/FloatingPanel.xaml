@@ -1,0 +1,90 @@
+<Window x:Class="KeyBeacon.App.Ui.FloatingPanel"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        Title="KeyBeacon">
+    <Window.Resources>
+        <Style x:Key="ModChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style x:Key="ModText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#88FFFFFF" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="10" Background="#E6202124" Padding="12" SnapsToDevicePixels="True">
+        <StackPanel MinWidth="180">
+            <!-- Title + state -->
+            <TextBlock Text="{Binding Title}" Foreground="White" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding StateText}" Foreground="#FFB0B0B0" FontSize="12"
+                       Margin="0,2,0,0"
+                       Visibility="{Binding StateText, Converter={StaticResource NonEmptyToVisibility}}" />
+
+            <!-- Layer + modifiers (US1) -->
+            <StackPanel Visibility="{Binding ShowStatus, Converter={StaticResource BoolToVisibility}}" Margin="0,6,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding LayerName}" Foreground="White" FontSize="20" FontWeight="Bold" />
+                    <TextBlock Text="{Binding StatusUpdatedHint}" Style="{StaticResource ModText}"
+                               VerticalAlignment="Bottom" Margin="8,0,0,2"
+                               Visibility="{Binding StatusStale, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Border Style="{StaticResource ModChip}"
+                            Background="{Binding Shift, Converter={StaticResource ActiveToBrush}}">
+                        <TextBlock Text="Shift" Foreground="{Binding Shift, Converter={StaticResource ActiveToText}}" FontSize="11" />
+                    </Border>
+                    <Border Style="{StaticResource ModChip}"
+                            Background="{Binding Control, Converter={StaticResource ActiveToBrush}}">
+                        <TextBlock Text="Ctrl" Foreground="{Binding Control, Converter={StaticResource ActiveToText}}" FontSize="11" />
+                    </Border>
+                    <Border Style="{StaticResource ModChip}"
+                            Background="{Binding Alt, Converter={StaticResource ActiveToBrush}}">
+                        <TextBlock Text="Alt" Foreground="{Binding Alt, Converter={StaticResource ActiveToText}}" FontSize="11" />
+                    </Border>
+                    <Border Style="{StaticResource ModChip}"
+                            Background="{Binding Gui, Converter={StaticResource ActiveToBrush}}">
+                        <TextBlock Text="Win" Foreground="{Binding Gui, Converter={StaticResource ActiveToText}}" FontSize="11" />
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Connectivity (US5) -->
+            <ItemsControl ItemsSource="{Binding ConnectivityRows}" Margin="0,8,0,0"
+                          Visibility="{Binding ShowConnectivity, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,1">
+                            <TextBlock Text="{Binding Label}" Foreground="#FF9A9A9A" FontSize="11" />
+                            <TextBlock Text="{Binding Value}" Foreground="#FFE0E0E0" FontSize="11"
+                                       HorizontalAlignment="Right" DockPanel.Dock="Right" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Battery (US5) -->
+            <ItemsControl ItemsSource="{Binding BatteryRows}" Margin="0,6,0,0"
+                          Visibility="{Binding ShowBattery, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,1">
+                            <TextBlock Text="{Binding Label}" Foreground="#FF9A9A9A" FontSize="11" />
+                            <TextBlock Text="{Binding Value}" Foreground="#FFE0E0E0" FontSize="11"
+                                       HorizontalAlignment="Right" DockPanel.Dock="Right" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</Window>

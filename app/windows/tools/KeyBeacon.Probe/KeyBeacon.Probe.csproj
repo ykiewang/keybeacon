@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>KeyBeacon.Probe</RootNamespace>
+    <AssemblyName>KeyBeacon.Probe</AssemblyName>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <NoWarn>$(NoWarn);CA1031;CA1848;CA2007;CA1303;CA1305;CA1307;CA2227</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\KeyBeacon.Core\KeyBeacon.Core.csproj" />
+  </ItemGroup>
+
+</Project>

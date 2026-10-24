@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="AppName" xml:space="preserve">
+    <value>KeyBeacon</value>
+  </data>
+  <data name="Menu_Reconnect" xml:space="preserve">
+    <value>重新连接</value>
+  </data>
+  <data name="Menu_Quit" xml:space="preserve">
+    <value>退出</value>
+  </data>
+  <data name="Menu_ShowPanel" xml:space="preserve">
+    <value>显示浮窗</value>
+  </data>
+  <data name="Menu_VerboseLogging" xml:space="preserve">
+    <value>详细日志</value>
+  </data>
+  <data name="Menu_ExportDiagnostics" xml:space="preserve">
+    <value>导出诊断信息…</value>
+  </data>
+  <data name="Menu_Keyboard" xml:space="preserve">
+    <value>键盘</value>
+  </data>
+  <data name="Menu_NoKeyboards" xml:space="preserve">
+    <value>无兼容键盘</value>
+  </data>
+  <data name="Menu_DisplayFull" xml:space="preserve">
+    <value>完整</value>
+  </data>
+  <data name="Menu_DisplayCompact" xml:space="preserve">
+    <value>精简</value>
+  </data>
+
+  <data name="State_Disconnected" xml:space="preserve">
+    <value>未连接</value>
+  </data>
+  <data name="State_BluetoothUnavailable" xml:space="preserve">
+    <value>蓝牙不可用</value>
+  </data>
+  <data name="State_NoKeyboard" xml:space="preserve">
+    <value>无可用键盘</value>
+  </data>
+  <data name="State_UnsupportedVersion" xml:space="preserve">
+    <value>协议版本不受支持</value>
+  </data>
+  <data name="State_Connecting" xml:space="preserve">
+    <value>正在连接…</value>
+  </data>
+  <data name="State_UpdatedAt" xml:space="preserve">
+    <value>更新于 {0}</value>
+  </data>
+
+  <data name="Mod_Shift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="Mod_Control" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="Mod_Alt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="Mod_Gui" xml:space="preserve">
+    <value>Win</value>
+  </data>
+  <data name="Layer_Fallback" xml:space="preserve">
+    <value>L{0}</value>
+  </data>
+
+  <data name="Conn_HostLink" xml:space="preserve">
+    <value>主机链路</value>
+  </data>
+  <data name="Conn_Profile" xml:space="preserve">
+    <value>配置</value>
+  </data>
+  <data name="Conn_SplitLeft" xml:space="preserve">
+    <value>左半</value>
+  </data>
+  <data name="Conn_SplitRight" xml:space="preserve">
+    <value>右半</value>
+  </data>
+  <data name="Conn_Output" xml:space="preserve">
+    <value>输出</value>
+  </data>
+  <data name="Conn_Charging" xml:space="preserve">
+    <value>充电</value>
+  </data>
+  <data name="Conn_Online" xml:space="preserve">
+    <value>在线</value>
+  </data>
+  <data name="Conn_Offline" xml:space="preserve">
+    <value>离线</value>
+  </data>
+  <data name="Output_Usb" xml:space="preserve">
+    <value>USB</value>
+  </data>
+  <data name="Output_Ble" xml:space="preserve">
+    <value>BLE</value>
+  </data>
+  <data name="Output_Unknown" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="Battery_Left" xml:space="preserve">
+    <value>左</value>
+  </data>
+  <data name="Battery_Right" xml:space="preserve">
+    <value>右</value>
+  </data>
+  <data name="Battery_Unavailable" xml:space="preserve">
+    <value>不可用</value>
+  </data>
+  <data name="Battery_Percent" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+
+  <data name="Dialog_ExportTitle" xml:space="preserve">
+    <value>导出诊断信息</value>
+  </data>
+  <data name="Dialog_ExportReview" xml:space="preserve">
+    <value>诊断包将包含：应用与操作系统版本、检测到的协议版本、键盘摘要、近期日志。蓝牙地址与键盘标识符将被省略，设备名默认打码。是否继续？</value>
+  </data>
+  <data name="Dialog_ExportIncludeNames" xml:space="preserve">
+    <value>包含完整键盘设备名</value>
+  </data>
+  <data name="Dialog_ExportDone" xml:space="preserve">
+    <value>诊断信息已写入：\n{0}</value>
+  </data>
+  <data name="Dialog_ExportFailed" xml:space="preserve">
+    <value>导出诊断信息失败：{0}</value>
+  </data>
+  <data name="Dialog_OSUnsupported" xml:space="preserve">
+    <value>KeyBeacon 需要 Windows 10 版本 2004（build 19041）或更高版本。</value>
+  </data>
+</root>
