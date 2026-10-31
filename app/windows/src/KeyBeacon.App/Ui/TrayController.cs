@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using H.NotifyIcon;
 using KeyBeacon.App.Ble;
 using KeyBeacon.App.Localization;
@@ -83,38 +81,24 @@ public sealed class TrayController : IDisposable
     }
 
     /// <summary>
-    /// Renders the tray glyph at runtime (rounded dark tile + white "K"), so the
-    /// app needs no packaged .ico. Mirrors the floating panel's dark styling.
+    /// Builds the tray glyph (rounded dark tile + white "K") as a
+    /// <see cref="GeneratedIconSource"/>. H.NotifyIcon's <c>ToIconAsync</c>
+    /// special-cases this type and rasterises it with its own GDI+ generator,
+    /// so it bypasses the WPF ImageSource→Uri conversion that cannot handle a
+    /// runtime-generated <c>RenderTargetBitmap</c>/<c>BitmapFrame</c>
+    /// (the source of the earlier startup crash).
     /// </summary>
-    private static ImageSource BuildTrayIcon()
+    private static ImageSource BuildTrayIcon() => new GeneratedIconSource
     {
-        const int size = 32;
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen())
-        {
-            var bg = new SolidColorBrush(Color.FromRgb(0x20, 0x21, 0x24));
-            dc.DrawRoundedRectangle(bg, null, new Rect(0, 0, size, size), 7, 7);
-            var text = new FormattedText(
-                "K",
-                CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-                20,
-                Brushes.White,
-                1.0);
-            dc.DrawText(text, new Point((size - text.Width) / 2, (size - text.Height) / 2));
-        }
-
-        var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
-        bmp.Render(visual);
-
-        // H.NotifyIcon's icon conversion only accepts BitmapImage/BitmapFrame —
-        // a raw RenderTargetBitmap throws NotImplementedException during the
-        // deferred HICON conversion. Wrap it in a BitmapFrame.
-        var frame = BitmapFrame.Create(bmp);
-        frame.Freeze();
-        return frame;
-    }
+        Text = "K",
+        Foreground = Brushes.White,
+        Background = new SolidColorBrush(Color.FromRgb(0x20, 0x21, 0x24)),
+        FontFamily = new FontFamily("Segoe UI"),
+        FontWeight = FontWeights.Bold,
+        FontSize = 44,
+        Size = 64,
+        CornerRadius = new CornerRadius(12)
+    };
 
     public event EventHandler? ShowPanelRequested;
     public event EventHandler? ReconnectRequested;
