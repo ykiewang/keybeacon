@@ -51,17 +51,23 @@ public partial class App : Application
             _lifecycleLog = DiagnosticsLogger.For(_logging.Factory, DiagnosticsLogger.Categories.Connection);
 
             _viewModel = new MainViewModel(_loc);
+            _viewModel.SetDisplayMode(_settings.DisplayMode);
             _panel = new FloatingPanel(_viewModel, _settings);
-            _panel.Show();
-            _panel.ApplyPlacement();
+            if (_settings.PanelVisible)
+            {
+                _panel.Show();
+                _panel.ApplyPlacement();
+            }
 
             _tray = new TrayController(_loc, _settings);
-            _tray.ShowPanelRequested += (_, _) => ShowPanel();
+            _tray.TogglePanelRequested += (_, _) => TogglePanel();
             _tray.ReconnectRequested += (_, _) => _ = RunBleAsync(() => _monitor!.ReconnectAsync());
             _tray.QuitRequested += (_, _) => Shutdown();
             _tray.ExportDiagnosticsRequested += (_, _) => ExportDiagnostics();
             _tray.KeyboardSelected += (_, id) => OnKeyboardSelected(id);
             _tray.VerboseLoggingToggled += (_, enabled) => OnVerboseToggled(enabled);
+            _tray.PinCornerSelected += (_, corner) => OnPinCorner(corner);
+            _tray.DisplayModeSelected += (_, mode) => OnDisplayMode(mode);
 
             _monitor = new KeyboardMonitor(_logging.Factory, Post);
             _monitor.SnapshotChanged += (_, snapshot) => OnSnapshot(snapshot);
@@ -186,10 +192,40 @@ public partial class App : Application
 
     private static string? DescribeAdapter() => "see logs"; // populated from Radio enumeration in the monitor if needed
 
-    private void ShowPanel()
+    private void TogglePanel()
     {
-        _panel!.Show();
-        _panel.Activate();
+        if (_panel!.IsVisible)
+        {
+            _panel.Hide();
+            _settings.PanelVisible = false;
+        }
+        else
+        {
+            _panel.Show();
+            _panel.Activate();
+            _panel.ApplyPlacement();
+            _settings.PanelVisible = true;
+        }
+
+        _settings.Save();
+        _tray!.SetPanelVisible(_settings.PanelVisible);
+    }
+
+    private void OnPinCorner(PinnedCorner? corner)
+    {
+        _settings.PinnedCorner = corner;
+        _settings.Save();
+        _tray!.SetPinnedCorner(corner);
+        _panel!.ApplyPlacement();
+    }
+
+    private void OnDisplayMode(DisplayMode mode)
+    {
+        _settings.DisplayMode = mode;
+        _settings.Save();
+        _viewModel!.SetDisplayMode(mode);
+        _tray!.SetDisplayMode(mode);
+        _panel!.ApplyPlacement();
     }
 
     private void Post(Action action) => Dispatcher.BeginInvoke(action, DispatcherPriority.Normal);

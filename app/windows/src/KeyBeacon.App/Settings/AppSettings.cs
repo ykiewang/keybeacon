@@ -51,6 +51,9 @@ public sealed class AppSettings
     public double? PanelLeft { get; set; }
     public double? PanelTop { get; set; }
 
+    /// <summary>Whether the floating panel is shown (toggled from the tray). Default visible.</summary>
+    public bool PanelVisible { get; set; } = true;
+
     public bool VerboseLogging { get; set; }
     public UiCulturePreference UICulture { get; set; } = UiCulturePreference.System;
 

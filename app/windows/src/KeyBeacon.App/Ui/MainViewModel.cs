@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using KeyBeacon.App.Ble;
 using KeyBeacon.App.Localization;
+using KeyBeacon.App.Settings;
 using KeyBeacon.Core;
 
 namespace KeyBeacon.App.Ui;
@@ -61,6 +63,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _showBattery;
     public bool ShowBattery { get => _showBattery; private set => Set(ref _showBattery, value); }
 
+    // Display-mode (full vs single-row compact), driven from the tray menu and
+    // persisted in settings. Mirrors macOS DisplayMode.
+    private bool _showFull = true;
+    public bool ShowFull { get => _showFull; private set => Set(ref _showFull, value); }
+
+    private bool _showCompact;
+    public bool ShowCompact { get => _showCompact; private set => Set(ref _showCompact, value); }
+
+    private string _compactSummary = string.Empty;
+    public string CompactSummary { get => _compactSummary; private set => Set(ref _compactSummary, value); }
+
+    private DisplayMode _displayMode = DisplayMode.Full;
+
+    public void SetDisplayMode(DisplayMode mode)
+    {
+        _displayMode = mode;
+        ShowCompact = mode == DisplayMode.Compact;
+        ShowFull = mode == DisplayMode.Full;
+    }
+
     public void Apply(KeyboardSnapshot s)
     {
         Title = s.KeyboardDisplayName ?? _loc.Get("AppName");
@@ -91,6 +113,42 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplyStatus(connected ? s.Status : null, s.StatusFreshness);
         ApplyConnectivity(connected ? s.Connectivity : null, connected ? s.Capability : null);
         ApplyBattery(connected ? s.Battery : null, connected ? s.Capability : null);
+        CompactSummary = BuildCompactSummary(s, connected);
+    }
+
+    /// <summary>
+    /// One-line condensed status for compact mode: layer · active modifiers ·
+    /// battery. Falls back to the state text when not connected. Battery shows
+    /// whenever data is present (charging bits never gate the percentage).
+    /// </summary>
+    private string BuildCompactSummary(KeyboardSnapshot s, bool connected)
+    {
+        if (!connected || s.Status is not { } status)
+        {
+            return string.IsNullOrEmpty(StateText) ? _loc.Get("State_NoKeyboard") : StateText;
+        }
+
+        var parts = new List<string> { _loc.LayerLabel(status.LayerIndex, status.LayerName) };
+
+        var mods = new List<string>(4);
+        if (status.ShiftActive) mods.Add(_loc.Get("Mod_Shift"));
+        if (status.ControlActive) mods.Add(_loc.Get("Mod_Control"));
+        if (status.AltActive) mods.Add(_loc.Get("Mod_Alt"));
+        if (status.GuiActive) mods.Add(_loc.Get("Mod_Gui"));
+        if (mods.Count > 0) parts.Add(string.Join(" ", mods));
+
+        switch (s.Battery?.Shape)
+        {
+            case BatteryStatus.Kind.Overall o:
+                parts.Add(_loc.BatteryLabel(o.Reading.Percent));
+                break;
+            case BatteryStatus.Kind.Split sp:
+                parts.Add($"{_loc.Get("Battery_Left")} {_loc.BatteryLabel(sp.Left.Percent)}  " +
+                          $"{_loc.Get("Battery_Right")} {_loc.BatteryLabel(sp.Right.Percent)}");
+                break;
+        }
+
+        return string.Join("   ", parts);
     }
 
     private void ApplyStatus(KeyboardStatus? status, FieldFreshness freshness)

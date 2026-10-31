@@ -23,7 +23,9 @@
     </Window.Resources>
 
     <Border CornerRadius="10" Background="#E6202124" Padding="12" SnapsToDevicePixels="True">
-        <StackPanel MinWidth="180">
+        <Grid>
+        <StackPanel MinWidth="180"
+                    Visibility="{Binding ShowFull, Converter={StaticResource BoolToVisibility}}">
             <!-- Title + state -->
             <TextBlock Text="{Binding Title}" Foreground="White" FontSize="13" FontWeight="SemiBold" />
             <TextBlock Text="{Binding StateText}" Foreground="#FFB0B0B0" FontSize="12"
@@ -86,5 +88,10 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </StackPanel>
+        <TextBlock Text="{Binding CompactSummary}"
+                   Foreground="White" FontSize="13" FontWeight="SemiBold"
+                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                   Visibility="{Binding ShowCompact, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
     </Border>
 </Window>

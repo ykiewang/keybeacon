@@ -72,6 +72,27 @@
   <data name="Menu_DisplayCompact" xml:space="preserve">
     <value>Compact</value>
   </data>
+  <data name="Menu_DisplayMode" xml:space="preserve">
+    <value>Display Mode</value>
+  </data>
+  <data name="Menu_PinCorner" xml:space="preserve">
+    <value>Pin to Corner</value>
+  </data>
+  <data name="Menu_PinOff" xml:space="preserve">
+    <value>Off (remember position)</value>
+  </data>
+  <data name="Corner_TopLeft" xml:space="preserve">
+    <value>Top-left</value>
+  </data>
+  <data name="Corner_TopRight" xml:space="preserve">
+    <value>Top-right</value>
+  </data>
+  <data name="Corner_BottomLeft" xml:space="preserve">
+    <value>Bottom-left</value>
+  </data>
+  <data name="Corner_BottomRight" xml:space="preserve">
+    <value>Bottom-right</value>
+  </data>
 
   <data name="State_Disconnected" xml:space="preserve">
     <value>Disconnected</value>
