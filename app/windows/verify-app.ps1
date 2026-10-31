@@ -135,9 +135,18 @@ try {
     $slog = Join-Path $LogDir "keybeacon-$today.log"
     if (Test-Path $slog) {
         Write-Host ""
-        Write-Host "----- latest Serilog (last 25 lines) -----" -ForegroundColor DarkGray
-        Get-Content $slog -Tail 25 | Write-Host
-        Write-Host "------------------------------------------" -ForegroundColor DarkGray
+        Write-Host "----- Serilog (this run only) -----" -ForegroundColor DarkGray
+        $lines = @(Get-Content $slog)
+        $startIdx = -1
+        for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+            if ($lines[$i] -match 'app\.started') { $startIdx = $i; break }
+        }
+        if ($startIdx -ge 0) {
+            $lines[$startIdx..($lines.Count - 1)] | Write-Host
+        } else {
+            $lines | Select-Object -Last 25 | Write-Host
+        }
+        Write-Host "-----------------------------------" -ForegroundColor DarkGray
     }
     Write-Host "==============================================" -ForegroundColor Cyan
 
