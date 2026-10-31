@@ -102,22 +102,22 @@ Windows `Diagnostics` 复刻 macOS `DiagnosticsLogger` 的事件，保证跨平�
 
 ## 5. 真机验证结论（probe 跑完后回填）
 
-> **状态：待真机。** 本机为 macOS，无法编译/运行/BLE 测试（环境约束）。下表待在 Windows 主机 + Corne（KBP 参考键盘）上执行 `KeyBeacon.Probe` 后填写。
+> **状态：已验证 PASS。** 2026-10-31 在 Windows 11（10.0.26100，x64，.NET 8.0.33）上执行 `KeyBeacon.Probe`，参考键盘为 **TOTEM**（KBP 1.1，含 AA1/AA2/AA3）。verdict=**PASS**，门禁开。
 
 | ID | 结果 | 实测数据 / 备注 |
 |----|------|-----------------|
-| P1 | ⬜ pending | |
-| P2 | ⬜ pending | |
-| P3 | ⬜ pending | |
-| P4 | ⬜ pending | |
-| P5 | ⬜ pending | |
-| P6 | ⬜ pending | |
+| P1 | ✅ PASS | `apartment=MTA`；WinRT GATT 异步在 `[MTAThread]` 下不挂起 |
+| P2 | ✅ PASS | 枚举到 1 台已连接设备：`TOTEM`（id `…9b:1a:c1-cb:e3:c4:10:be:53`）；耗时 197 ms |
+| P3 | ✅ PASS | GATT 会话建立后打字不中断（操作者确认）——核心前提成立，无需回退 |
+| P4 | ✅ PASS | `classify=Supported`；发现 `AA1,AA2,AA3`（完整 KBP 1.1：层/修饰键 + 连接 + 电量）；耗时 461 ms |
+| P5 | ✅ PASS | 首个 notify `000042415345` → 解析 `layer=BASE`、`mods=none`（解析器逐字节正确）；订阅→首 notify 11452 ms（含操作者切层的人工反应时间） |
+| P6 | ✅ PASS | 非阻塞。`observed_max_ms=11452` 实为 P5 等待人工操作的时延；真实 GATT 调用均 <500 ms（P2=197/P4=461）。**结论：`--timeout` 默认 10 s 对真实 GATT 操作足够，维持不变。** |
 
-**门禁结论**：⬜ pending（P1–P5 全 PASS ⇒ 推进 Phase 1 实现；否则按 §3 回退并记录）。
+**门禁结论**：✅ **PASS**（P1–P5 全 PASS ⇒ 推进 Phase 1 实现）。P6 非阻塞，实测确认 10 s 默认超时合理。
 
 ## 6. 仍未解决 / 依赖真机的未知项
 
-- `dotnet` SDK 在开发者 Windows 机上的可用性（本 macOS 机无法确认）。
-- Windows「陈旧已连接设备」枚举/连接的真实超时行为（P6）。
-- GATT 共享连接是否在所有 Win10 2004+/Win11 组合上都不踢 HID（P3，可能因驱动/芯片组而异）。
+- ~~`dotnet` SDK 在开发者 Windows 机上的可用性~~ → 已确认（.NET 8.0.33，Windows 11 10.0.26100）。
+- ~~Windows「陈旧已连接设备」枚举/连接的真实超时行为（P6）~~ → 已测：真实 GATT 调用 <500 ms，10 s 默认超时足够。
+- ~~GATT 共享连接是否不踢 HID（P3）~~ → 在本机 TOTEM 上确认不中断打字；其它驱动/芯片组组合仍建议逐一验证。
 - Linux：BlueZ 内核 HID 与 GATT 订阅是否冲突——复用 `conformance/conformance_tool.py` 在 Linux 主机探查，结论记入 US4，不阻塞 Windows。

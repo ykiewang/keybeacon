@@ -77,7 +77,7 @@ description: "Task list for Windows 桌面客户端（KeyBeacon Windows Client�
 - [X] T020 实现 `app/windows/tools/KeyBeacon.Probe/Program.cs`：`[MTAThread]` 入口 + 参数解析 `--device/--timeout/--json/--verbose`（CLI-1）
 - [X] T021 [P] 实现 `app/windows/tools/KeyBeacon.Probe/BleProbe.cs`：`GetDeviceSelectorFromConnectionStatus(Connected)` + `FindAllAsync` + `DeviceWatcher`；`FromIdAsync` → `GetGattServicesAsync` 带超时（C-2 陈旧连接策略）
 - [X] T022 实现 `app/windows/tools/KeyBeacon.Probe/Checks.cs`：P1–P6 检查、原始字节 hex、逐调用耗时，输出 JSON run log（CLI-3）
-- [ ] T023 🖥️ 在 Windows + Corne 上执行 probe，把 verdict/checks 回填 `specs/003-windows-desktop-client/research.md` §5，并据 P6 实测值确定 `--timeout` 默认（SC-006）
+- [X] T023 🖥️ 在 Windows + Corne 上执行 probe，把 verdict/checks 回填 `specs/003-windows-desktop-client/research.md` §5，并据 P6 实测值确定 `--timeout` 默认（SC-006）
 
 **Checkpoint**: probe verdict=PASS，门禁开，可进入用户故事实现。
 
@@ -189,7 +189,7 @@ description: "Task list for Windows 桌面客户端（KeyBeacon Windows Client�
 
 ## Phase 10: Polish & Cross-Cutting
 
-- [ ] T050 [P] 运行 `dotnet test app/windows/tests/KeyBeacon.Core.Tests/KeyBeacon.Core.Tests.csproj` 全绿（SC-005：共享测试向量 100% 通过）
+- [X] T050 [P] 运行 `dotnet test app/windows/tests/KeyBeacon.Core.Tests/KeyBeacon.Core.Tests.csproj` 全绿（SC-005：共享测试向量 100% 通过）
 - [ ] T051 🖥️ [P] 在 Windows 上按 `specs/003-windows-desktop-client/quickstart.md` 执行 S1–S6 端到端验收剧本
 - [X] T052 [P] macOS 零回归：在 macOS 主机对 `app/macos/Package.swift` 工程 `swift test` 全绿（SC-004）
 - [X] T053 在 `app/windows/src/KeyBeacon.App/Ble/KeyboardMonitor.cs` 核对性能/降噪：状态未变化不产生多余刷新/流量（FR-006），空闲零噪声日志
