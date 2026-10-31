@@ -71,9 +71,32 @@ function Ensure-DiagDir {
     if (-not (Test-Path $DiagDir)) { New-Item -ItemType Directory -Path $DiagDir | Out-Null }
 }
 
+function Invoke-Native {
+    param(
+        [string]$Exe,
+        [string[]]$ExeArgs,
+        [string]$LogPath
+    )
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $all = & $Exe @ExeArgs 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    if ($LogPath) {
+        $all | ForEach-Object { $_.ToString() } | Set-Content -Path $LogPath -Encoding UTF8 -Append
+    }
+    $all | ForEach-Object { Write-Host $_ }
+    return $code
+}
+
 function Collect-Diagnostics {
     Say "Collecting diagnostics -> $DiagDir"
     Ensure-DiagDir
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
 
     try {
         $os = Get-CimInstance Win32_OperatingSystem
@@ -113,16 +136,23 @@ function Collect-Diagnostics {
     if ([string]::IsNullOrWhiteSpace($outDir) -or -not (Test-Path $outDir)) { $outDir = $env:TEMP }
     $zipPath = Join-Path $outDir "keybeacon-diag-$Stamp.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    Compress-Archive -Path (Join-Path $DiagDir '*') -DestinationPath $zipPath -Force
-    OkM "Diagnostic bundle: $zipPath"
-    Write-Host ""
-    Write-Host "Please send this file back for triage:" -ForegroundColor Yellow
-    Write-Host "  $zipPath" -ForegroundColor Yellow
+    try {
+        Compress-Archive -Path (Join-Path $DiagDir '*') -DestinationPath $zipPath -Force
+        OkM "Diagnostic bundle: $zipPath"
+        Write-Host ""
+        Write-Host "Please send this file back for triage:" -ForegroundColor Yellow
+        Write-Host "  $zipPath" -ForegroundColor Yellow
+    } catch {
+        Warn "zip failed ($_); raw diag dir: $DiagDir"
+    }
+    $ErrorActionPreference = $prev
     return $zipPath
 }
 
 function Check-Prereqs {
     Say "Checking prerequisites"
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     $gate = $true
 
     $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
@@ -145,6 +175,7 @@ function Check-Prereqs {
         $gate = $false
     }
 
+    $ErrorActionPreference = $prev
     return $gate
 }
 
@@ -154,31 +185,31 @@ function Sync-Repo {
 
     if (-not (Test-Path $RepoDir)) {
         Say "Cloning $RepoUrl"
-        & git clone $RepoUrl $RepoDir *>&1 | Tee-Object -FilePath (Join-Path $DiagDir 'clone.log')
-        if ($LASTEXITCODE -ne 0) { ErrM "git clone failed (proxy/network?)."; Record 'clone' $LASTEXITCODE (Join-Path $DiagDir 'clone.log'); return $false }
+        $code = Invoke-Native 'git' @('clone', $RepoUrl, $RepoDir) (Join-Path $DiagDir 'clone.log')
+        if ($code -ne 0) { ErrM "git clone failed (proxy/network?)."; Record 'clone' $code (Join-Path $DiagDir 'clone.log'); return $false }
     }
 
     Set-Location $RepoDir
     if (-not $NoUpdate) {
-        & git fetch origin *>&1 | Tee-Object -FilePath (Join-Path $DiagDir 'fetch.log')
-        if ($LASTEXITCODE -ne 0) { ErrM "git fetch failed."; Record 'fetch' $LASTEXITCODE (Join-Path $DiagDir 'fetch.log'); return $false }
+        $code = Invoke-Native 'git' @('fetch', 'origin') (Join-Path $DiagDir 'fetch.log')
+        if ($code -ne 0) { ErrM "git fetch failed."; Record 'fetch' $code (Join-Path $DiagDir 'fetch.log'); return $false }
     }
 
-    $cur = (& git rev-parse --abbrev-ref HEAD *>&1)
+    $cur = ((& git rev-parse --abbrev-ref HEAD 2>$null) | Out-String).Trim()
     if ($cur -ne $Branch) {
-        & git checkout $Branch *>&1 | Tee-Object -FilePath (Join-Path $DiagDir 'checkout.log')
-        if ($LASTEXITCODE -ne 0) {
-            & git checkout -b $Branch "origin/$Branch" *>&1 | Tee-Object -FilePath (Join-Path $DiagDir 'checkout.log')
-            if ($LASTEXITCODE -ne 0) { ErrM "Cannot switch to $Branch."; Record 'checkout' $LASTEXITCODE (Join-Path $DiagDir 'checkout.log'); return $false }
+        $code = Invoke-Native 'git' @('checkout', $Branch) (Join-Path $DiagDir 'checkout.log')
+        if ($code -ne 0) {
+            $code = Invoke-Native 'git' @('checkout', '-b', $Branch, "origin/$Branch") (Join-Path $DiagDir 'checkout.log')
+            if ($code -ne 0) { ErrM "Cannot switch to $Branch."; Record 'checkout' $code (Join-Path $DiagDir 'checkout.log'); return $false }
         }
     }
 
     if (-not $NoUpdate) {
-        & git pull --ff-only origin $Branch *>&1 | Tee-Object -FilePath (Join-Path $DiagDir 'pull.log')
-        if ($LASTEXITCODE -ne 0) { Warn "git pull --ff-only failed; continuing with local HEAD." }
+        $code = Invoke-Native 'git' @('pull', '--ff-only', 'origin', $Branch) (Join-Path $DiagDir 'pull.log')
+        if ($code -ne 0) { Warn "git pull --ff-only failed; continuing with local HEAD." }
     }
 
-    $sha = (& git rev-parse --short HEAD *>&1)
+    $sha = ((& git rev-parse --short HEAD 2>$null) | Out-String).Trim()
     OkM "On $Branch @ $sha"
     return $true
 }
@@ -186,11 +217,11 @@ function Sync-Repo {
 function Do-Build {
     Say "dotnet restore + build (Release)"
     $log = Join-Path $DiagDir 'build.log'
-    & dotnet restore $SlnPath *>&1 | Tee-Object -FilePath $log
-    if ($LASTEXITCODE -ne 0) { Record 'restore' $LASTEXITCODE $log; return $false }
+    $code = Invoke-Native 'dotnet' @('restore', $SlnPath) $log
+    if ($code -ne 0) { Record 'restore' $code $log; return $false }
 
-    & dotnet build $SlnPath -c Release --no-restore *>&1 | Tee-Object -FilePath $log -Append
-    if ($LASTEXITCODE -ne 0) { Record 'build' $LASTEXITCODE $log; return $false }
+    $code = Invoke-Native 'dotnet' @('build', $SlnPath, '-c', 'Release', '--no-restore') $log
+    if ($code -ne 0) { Record 'build' $code $log; return $false }
     Record 'build' 0 $log
     OkM "Build succeeded"
     return $true
@@ -199,8 +230,8 @@ function Do-Build {
 function Do-Tests {
     Say "dotnet test (KeyBeacon.Core.Tests)"
     $log = Join-Path $DiagDir 'test.log'
-    & dotnet test $TestProj -c Release --no-build *>&1 | Tee-Object -FilePath $log
-    if ($LASTEXITCODE -ne 0) { Record 'test' $LASTEXITCODE $log; return $false }
+    $code = Invoke-Native 'dotnet' @('test', $TestProj, '-c', 'Release', '--no-build') $log
+    if ($code -ne 0) { Record 'test' $code $log; return $false }
     Record 'test' 0 $log
     OkM "All Core tests passed"
     return $true
@@ -213,8 +244,7 @@ function Do-Probe {
     $probeArgs = @('run','--project', $ProbeProj, '-c','Release','--no-build','--','--verbose','--json', $json,'--timeout',$Timeout)
     if ($Device) { $probeArgs += @('--device', $Device) }
 
-    & dotnet @probeArgs *>&1 | Tee-Object -FilePath $log
-    $code = $LASTEXITCODE
+    $code = Invoke-Native 'dotnet' $probeArgs $log
     Record 'probe' $code $log
 
     if (Test-Path $json) {
