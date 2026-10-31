@@ -17,11 +17,6 @@ on:
   push:
     tags:
       - 'app-v*'
-    branches:
-      # TEMPORARY: validate the build job on this feature branch from CI.
-      # Removed before merge — release is still tag-only (the release job is
-      # gated to refs/tags/app-v*, so branch pushes only run `build`).
-      - 'feat/windows-ble-probe'
   workflow_dispatch:
     inputs:
       version:
@@ -82,7 +77,8 @@ jobs:
           $zip = "KeyBeacon-$rid-$ver.zip"
           Compress-Archive -Path "publish/$rid/*" -DestinationPath "dist/$zip" -Force
           $hash = (Get-FileHash "dist/$zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $zip" | Out-File -Encoding ascii "dist/$zip.sha256"
+          # LF-only, two-space separator so `sha256sum -c` works on Linux/macOS.
+          [IO.File]::WriteAllText("dist/$zip.sha256", "$hash  $zip`n")
           Get-ChildItem dist
 
       - uses: actions/upload-artifact@v4
