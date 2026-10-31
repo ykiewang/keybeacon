@@ -7,12 +7,12 @@ public class CapabilityMatrixTests
 {
     [Theory]
     [InlineData(0x00, false, false, false, false, false, false, false)]
-    [InlineData(0x01, true, false, false, false, false, false, false)]
-    [InlineData(0x02, false, true, false, false, false, false, false)]
-    [InlineData(0x04, false, false, true, false, false, false, false)]
-    [InlineData(0x10, false, false, false, false, true, false, false)]
-    [InlineData(0x20, false, false, false, false, false, true, false)]
-    [InlineData(0x40, false, false, false, false, false, false, true)]
+    [InlineData(0x01, true,  false, false, false, false, false, false)]
+    [InlineData(0x02, false, true,  false, false, false, false, false)]
+    [InlineData(0x04, false, false, true,  false, false, false, false)]
+    [InlineData(0x10, false, false, false, true,  false, false, false)]
+    [InlineData(0x20, false, false, false, false, true,  false, false)]
+    [InlineData(0x40, false, false, false, false, false, true,  false)]
     [InlineData(0x80, false, false, false, false, false, false, false)]
     public void FromByte_DecodesEachBit(
         byte raw, bool isSplit, bool host, bool profile, bool output, bool leftCharging, bool rightCharging, bool reserved7Ignored)
