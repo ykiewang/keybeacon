@@ -107,8 +107,13 @@ public sealed class TrayController : IDisposable
 
         var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
         bmp.Render(visual);
-        bmp.Freeze();
-        return bmp;
+
+        // H.NotifyIcon's icon conversion only accepts BitmapImage/BitmapFrame —
+        // a raw RenderTargetBitmap throws NotImplementedException during the
+        // deferred HICON conversion. Wrap it in a BitmapFrame.
+        var frame = BitmapFrame.Create(bmp);
+        frame.Freeze();
+        return frame;
     }
 
     public event EventHandler? ShowPanelRequested;
