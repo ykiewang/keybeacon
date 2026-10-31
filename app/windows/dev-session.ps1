@@ -263,8 +263,7 @@ function Do-Probe {
     Record 'probe' $code $log
 
     if (Test-Path $json) {
-        Copy-Item $json (Join-Path $DiagDir 'probe-run.json') -Force
-        OkM "probe-run.json captured"
+        OkM "probe-run.json captured ($json)"
     }
 
     switch ($code) {
