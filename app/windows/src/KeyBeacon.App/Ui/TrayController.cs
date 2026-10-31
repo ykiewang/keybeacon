@@ -69,9 +69,14 @@ public sealed class TrayController : IDisposable
         {
             ToolTipText = loc.Get("AppName"),
             ContextMenu = menu,
-            IconSource = BuildTrayIcon(),
             Visibility = Visibility.Visible
         };
+
+        // A failure here (icon rendering / native HICON conversion) must never
+        // take down the whole app — the tray menu still works without a glyph.
+        try { _icon.IconSource = BuildTrayIcon(); }
+        catch { /* fall back to the default/empty glyph */ }
+
         _icon.TrayLeftMouseUp += (_, _) => ShowPanelRequested?.Invoke(this, EventArgs.Empty);
 
         UpdateKeyboardsMenu();

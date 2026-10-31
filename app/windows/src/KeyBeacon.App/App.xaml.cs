@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -29,29 +30,76 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _settings = AppSettings.Load();
-        _loc = LocalizationService.FromPreference(_settings.UICulture);
-        _logging = LoggingSetup.Create(_settings.VerboseLogging);
-        _lifecycleLog = DiagnosticsLogger.For(_logging.Factory, DiagnosticsLogger.Categories.Connection);
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            WriteFatal("appdomain", args.ExceptionObject as Exception);
+        DispatcherUnhandledException += (_, args) =>
+        {
+            WriteFatal("dispatcher", args.Exception);
+            args.Handled = true; // tray app: survive transient UI/BLE faults
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            WriteFatal("task", args.Exception);
+            args.SetObserved();
+        };
 
-        _viewModel = new MainViewModel(_loc);
-        _panel = new FloatingPanel(_viewModel);
-        _panel.Show();
-        _panel.Reposition(_settings.PinnedCorner);
+        try
+        {
+            _settings = AppSettings.Load();
+            _loc = LocalizationService.FromPreference(_settings.UICulture);
+            _logging = LoggingSetup.Create(_settings.VerboseLogging);
+            _lifecycleLog = DiagnosticsLogger.For(_logging.Factory, DiagnosticsLogger.Categories.Connection);
 
-        _tray = new TrayController(_loc, _settings);
-        _tray.ShowPanelRequested += (_, _) => ShowPanel();
-        _tray.ReconnectRequested += (_, _) => _ = RunBleAsync(() => _monitor!.ReconnectAsync());
-        _tray.QuitRequested += (_, _) => Shutdown();
-        _tray.ExportDiagnosticsRequested += (_, _) => ExportDiagnostics();
-        _tray.KeyboardSelected += (_, id) => OnKeyboardSelected(id);
-        _tray.VerboseLoggingToggled += (_, enabled) => OnVerboseToggled(enabled);
+            _viewModel = new MainViewModel(_loc);
+            _panel = new FloatingPanel(_viewModel);
+            _panel.Show();
+            _panel.Reposition(_settings.PinnedCorner);
 
-        _monitor = new KeyboardMonitor(_logging.Factory, Post);
-        _monitor.SnapshotChanged += (_, snapshot) => OnSnapshot(snapshot);
-        _monitor.KeyboardsChanged += (_, list) => _tray!.UpdateKeyboards(list);
+            _tray = new TrayController(_loc, _settings);
+            _tray.ShowPanelRequested += (_, _) => ShowPanel();
+            _tray.ReconnectRequested += (_, _) => _ = RunBleAsync(() => _monitor!.ReconnectAsync());
+            _tray.QuitRequested += (_, _) => Shutdown();
+            _tray.ExportDiagnosticsRequested += (_, _) => ExportDiagnostics();
+            _tray.KeyboardSelected += (_, id) => OnKeyboardSelected(id);
+            _tray.VerboseLoggingToggled += (_, enabled) => OnVerboseToggled(enabled);
 
-        _ = RunBleAsync(() => _monitor.StartAsync(_settings.SelectedKeyboardId));
+            _monitor = new KeyboardMonitor(_logging.Factory, Post);
+            _monitor.SnapshotChanged += (_, snapshot) => OnSnapshot(snapshot);
+            _monitor.KeyboardsChanged += (_, list) => _tray!.UpdateKeyboards(list);
+
+            _ = RunBleAsync(() => _monitor.StartAsync(_settings.SelectedKeyboardId));
+        }
+        catch (Exception ex)
+        {
+            WriteFatal("startup", ex);
+            MessageBox.Show(
+                $"KeyBeacon failed to start:\n\n{ex}",
+                "KeyBeacon",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(1);
+        }
+    }
+
+    /// <summary>
+    /// Last-resort crash capture. Writes to the Serilog pipeline when available
+    /// and always appends to a plain <c>crash.log</c> next to the rolling logs,
+    /// so a startup/native failure can never vanish silently.
+    /// </summary>
+    private void WriteFatal(string phase, Exception? ex)
+    {
+        try { _lifecycleLog?.LogCritical(ex, "fatal phase={Phase}", phase); }
+        catch { /* logging must never mask the original fault */ }
+
+        try
+        {
+            var dir = LoggingSetup.DefaultLogDirectory;
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(
+                Path.Combine(dir, "crash.log"),
+                $"{DateTimeOffset.Now:o} [{phase}] {ex}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch { /* nothing more we can do */ }
     }
 
     private void OnSnapshot(KeyboardSnapshot snapshot)
