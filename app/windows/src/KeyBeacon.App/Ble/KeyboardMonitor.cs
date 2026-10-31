@@ -109,9 +109,9 @@ public sealed class KeyboardMonitor : IAsyncDisposable
 
         var selector = BluetoothLEDevice.GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus.Connected);
         _watcher = DeviceInformation.CreateWatcher(selector, null, DeviceInformationKind.AssociationEndpoint);
-        _watcher.Added += (_, info) => _ = OnDeviceAddedAsync(info);
-        _watcher.Removed += (_, update) => _ = OnDeviceRemovedAsync(update.Id);
-        _watcher.Updated += (_, _) => { };
+        _watcher.Added += (sender, info) => _ = OnDeviceAddedAsync(info);
+        _watcher.Removed += (sender, update) => _ = OnDeviceRemovedAsync(update.Id);
+        _watcher.Updated += (sender, update) => { };
         _watcher.Start();
     }
 

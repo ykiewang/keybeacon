@@ -43,6 +43,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$env:DOTNET_CLI_UI_LANGUAGE   = 'en'
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+$env:DOTNET_NOLOGO            = '1'
 $RepoUrl  = 'https://github.com/ykiewang/keybeacon.git'
 $Branch   = 'feat/windows-ble-probe'
 $SlnPath  = 'app/windows/KeyBeacon.sln'

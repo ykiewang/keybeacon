@@ -9,7 +9,7 @@ namespace KeyBeacon.App.Ui;
 /// </summary>
 public partial class FloatingPanel : Window
 {
-    private const double Margin = 12;
+    private const double EdgeMargin = 12;
 
     public FloatingPanel(MainViewModel viewModel)
     {
@@ -22,11 +22,11 @@ public partial class FloatingPanel : Window
     {
         var area = SystemParameters.WorkArea;
         var left = corner is PinnedCorner.TopLeft or PinnedCorner.BottomLeft
-            ? area.Left + Margin
-            : area.Right - ActualWidth - Margin;
+            ? area.Left + EdgeMargin
+            : area.Right - ActualWidth - EdgeMargin;
         var top = corner is PinnedCorner.TopLeft or PinnedCorner.TopRight
-            ? area.Top + Margin
-            : area.Bottom - ActualHeight - Margin;
+            ? area.Top + EdgeMargin
+            : area.Bottom - ActualHeight - EdgeMargin;
 
         Left = left;
         Top = top;
