@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -25,6 +26,11 @@ public partial class App : Application
     private FloatingPanel? _panel;
     private MainViewModel? _viewModel;
     private ILogger? _lifecycleLog;
+
+    // Cached so a language switch can re-render the panel and keybords menu
+    // with the new culture without waiting for the next BLE notification.
+    private KeyboardSnapshot? _lastSnapshot;
+    private IReadOnlyList<CompatibleKeyboard> _lastKeyboards = Array.Empty<CompatibleKeyboard>();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -59,19 +65,15 @@ public partial class App : Application
                 _panel.ApplyPlacement();
             }
 
-            _tray = new TrayController(_loc, _settings);
-            _tray.TogglePanelRequested += (_, _) => TogglePanel();
-            _tray.ReconnectRequested += (_, _) => _ = RunBleAsync(() => _monitor!.ReconnectAsync());
-            _tray.QuitRequested += (_, _) => Shutdown();
-            _tray.ExportDiagnosticsRequested += (_, _) => ExportDiagnostics();
-            _tray.KeyboardSelected += (_, id) => OnKeyboardSelected(id);
-            _tray.VerboseLoggingToggled += (_, enabled) => OnVerboseToggled(enabled);
-            _tray.PinCornerSelected += (_, corner) => OnPinCorner(corner);
-            _tray.DisplayModeSelected += (_, mode) => OnDisplayMode(mode);
+            BuildTray();
 
             _monitor = new KeyboardMonitor(_logging.Factory, Post);
             _monitor.SnapshotChanged += (_, snapshot) => OnSnapshot(snapshot);
-            _monitor.KeyboardsChanged += (_, list) => _tray!.UpdateKeyboards(list);
+            _monitor.KeyboardsChanged += (_, list) =>
+            {
+                _lastKeyboards = list;
+                _tray!.UpdateKeyboards(list);
+            };
 
             _ = RunBleAsync(() => _monitor.StartAsync(_settings.SelectedKeyboardId));
         }
@@ -85,6 +87,32 @@ public partial class App : Application
                 MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+
+    /// <summary>
+    /// Creates the tray controller and wires its events. Extracted so a language
+    /// switch can rebuild the menu with the new culture's labels without
+    /// touching the monitor/panel wiring.
+    /// </summary>
+    private void BuildTray()
+    {
+        _tray = new TrayController(_loc, _settings);
+        _tray.TogglePanelRequested += (_, _) => TogglePanel();
+        _tray.ReconnectRequested += (_, _) => _ = RunBleAsync(() => _monitor!.ReconnectAsync());
+        _tray.QuitRequested += (_, _) => Shutdown();
+        _tray.ExportDiagnosticsRequested += (_, _) => ExportDiagnostics();
+        _tray.KeyboardSelected += (_, id) => OnKeyboardSelected(id);
+        _tray.VerboseLoggingToggled += (_, enabled) => OnVerboseToggled(enabled);
+        _tray.PinCornerSelected += (_, corner) => OnPinCorner(corner);
+        _tray.DisplayModeSelected += (_, mode) => OnDisplayMode(mode);
+        _tray.LanguageSelected += (_, pref) => OnLanguageSelected(pref);
+
+        _tray.SetPanelVisible(_settings.PanelVisible);
+        _tray.SetPinnedCorner(_settings.PinnedCorner);
+        _tray.SetDisplayMode(_settings.DisplayMode);
+        _tray.SetLanguage(_settings.UICulture);
+        _tray.UpdateKeyboards(_lastKeyboards);
+        if (_monitor?.Current.KeyboardDisplayName is { } name) _tray.SetTitle(name);
     }
 
     /// <summary>
@@ -110,6 +138,7 @@ public partial class App : Application
 
     private void OnSnapshot(KeyboardSnapshot snapshot)
     {
+        _lastSnapshot = snapshot;
         _viewModel!.Apply(snapshot);
         _tray!.SetTitle(snapshot.KeyboardDisplayName ?? _loc.Get("AppName"));
 
@@ -226,6 +255,39 @@ public partial class App : Application
         _viewModel!.SetDisplayMode(mode);
         _tray!.SetDisplayMode(mode);
         _panel!.ApplyPlacement();
+    }
+
+    /// <summary>
+    /// Apply a language change immediately (FR-003 / FR-004 / FR-011): persist
+    /// the preference, rebuild the localisation service, re-render the panel via
+    /// the cached snapshot, and rebuild the tray menu under the new culture. No
+    /// restart, BLE monitoring untouched.
+    /// </summary>
+    private void OnLanguageSelected(UiCulturePreference preference)
+    {
+        if (_settings.UICulture == preference)
+        {
+            _tray!.SetLanguage(preference);
+            return;
+        }
+
+        _settings.UICulture = preference;
+        _settings.Save();
+
+        _loc = LocalizationService.FromPreference(preference);
+        _viewModel!.SetLocalization(_loc);
+        if (_lastSnapshot is { } snapshot)
+        {
+            _viewModel.Apply(snapshot);
+            _tray!.SetTitle(snapshot.KeyboardDisplayName ?? _loc.Get("AppName"));
+        }
+
+        // Rebuild the tray menu with the new culture's labels; the old icon is
+        // disposed after the new menu is wired (deferred to avoid tearing down
+        // the tray during this click callback).
+        var oldTray = _tray;
+        BuildTray();
+        Dispatcher.BeginInvoke(new Action(() => oldTray?.Dispose()), DispatcherPriority.Background);
     }
 
     private void Post(Action action) => Dispatcher.BeginInvoke(action, DispatcherPriority.Normal);

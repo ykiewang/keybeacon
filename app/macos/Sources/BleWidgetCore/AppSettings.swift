@@ -11,10 +11,10 @@ public enum PinnedCorner: String, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .topLeft: return "左上"
-        case .topRight: return "右上"
-        case .bottomLeft: return "左下"
-        case .bottomRight: return "右下"
+        case .topLeft: return L10n.text("Corner_TopLeft")
+        case .topRight: return L10n.text("Corner_TopRight")
+        case .bottomLeft: return L10n.text("Corner_BottomLeft")
+        case .bottomRight: return L10n.text("Corner_BottomRight")
         }
     }
 }
@@ -25,8 +25,8 @@ public enum DisplayMode: String, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .full: return "完整"
-        case .compact: return "精简"
+        case .full: return L10n.text("Menu_DisplayFull")
+        case .compact: return L10n.text("Menu_DisplayCompact")
         }
     }
 }
@@ -39,6 +39,7 @@ public final class AppSettings {
     private static let pinnedCornerKey = "panelPinnedCorner"
     private static let panelVisibleKey = "panelVisible"
     private static let displayModeKey = "panelDisplayMode"
+    private static let languagePrefKey = "uiLanguage"
 
     private static let legacyPositionPrefix = "totemPanelFrame"
     private static let legacyLockedKey = "totemPanelLocked"
@@ -77,6 +78,31 @@ public final class AppSettings {
             return DisplayMode(rawValue: raw) ?? .full
         }
         set { defaults.set(newValue.rawValue, forKey: Self.displayModeKey) }
+    }
+
+    // MARK: - Language preference (跟随系统 / 中文 / English)
+
+    /// User-visible three-state language preference (FR-001 / FR-004).
+    /// `system` is the default for first-run users (US3). Corrupt or unknown
+    /// stored values fall back to `system` rather than crashing or blanking.
+    public var languagePreference: LanguagePreference {
+        get {
+            guard let raw = defaults.string(forKey: Self.languagePrefKey),
+                  let pref = LanguagePreference(rawValue: raw) else {
+                return .system
+            }
+            return pref
+        }
+        set { defaults.set(newValue.rawValue, forKey: Self.languagePrefKey) }
+    }
+
+    /// The concrete language resolved from the persisted preference against the
+    /// current OS locale (FR-002). Resolved once per launch (spec Assumptions).
+    public var resolvedLanguage: ResolvedLanguage {
+        ResolvedLanguage.resolve(
+            preference: languagePreference,
+            systemCode: Locale.preferredLanguages.first
+        )
     }
 
     // MARK: - Panel lock

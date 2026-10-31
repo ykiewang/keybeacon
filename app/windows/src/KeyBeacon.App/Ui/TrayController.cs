@@ -31,6 +31,7 @@ public sealed class TrayController : IDisposable
     // (nullable-enum) value — null is the "off / remember position" entry.
     private readonly List<(PinnedCorner? Corner, MenuItem Item)> _pinItems = new();
     private readonly Dictionary<DisplayMode, MenuItem> _modeItems = new();
+    private readonly Dictionary<UiCulturePreference, MenuItem> _languageItems = new();
 
     private IReadOnlyList<CompatibleKeyboard> _keyboards = Array.Empty<CompatibleKeyboard>();
 
@@ -54,6 +55,7 @@ public sealed class TrayController : IDisposable
 
         var pinRoot = BuildPinMenu();
         var modeRoot = BuildModeMenu();
+        var languageRoot = BuildLanguageMenu();
 
         _verboseItem = new MenuItem
         {
@@ -77,6 +79,7 @@ public sealed class TrayController : IDisposable
         menu.Items.Add(new Separator());
         menu.Items.Add(pinRoot);
         menu.Items.Add(modeRoot);
+        menu.Items.Add(languageRoot);
         menu.Items.Add(new Separator());
         menu.Items.Add(_verboseItem);
         menu.Items.Add(export);
@@ -157,6 +160,28 @@ public sealed class TrayController : IDisposable
         return root;
     }
 
+    private MenuItem BuildLanguageMenu()
+    {
+        var root = new MenuItem { Header = _loc.Get("Menu_Language") };
+
+        // Order: follow-system, English, 中文 — concrete languages self-named so
+        // a user can always find their own (mirrors macOS), with the current
+        // preference shown checked (FR-012).
+        AddLanguageItem(root, UiCulturePreference.System, "Menu_LanguageSystem");
+        AddLanguageItem(root, UiCulturePreference.English, "Menu_LanguageEnglish");
+        AddLanguageItem(root, UiCulturePreference.Chinese, "Menu_LanguageChinese");
+        return root;
+    }
+
+    private void AddLanguageItem(MenuItem root, UiCulturePreference preference, string labelKey)
+    {
+        var item = NewCheckItem(_loc.Get(labelKey));
+        item.IsChecked = _settings.UICulture == preference;
+        item.Click += (_, _) => LanguageSelected?.Invoke(this, preference);
+        _languageItems[preference] = item;
+        root.Items.Add(item);
+    }
+
     private static MenuItem NewCheckItem(string header) =>
         new() { Header = header, IsCheckable = true };
 
@@ -199,6 +224,7 @@ public sealed class TrayController : IDisposable
     public event EventHandler<bool>? VerboseLoggingToggled;
     public event EventHandler<PinnedCorner?>? PinCornerSelected;
     public event EventHandler<DisplayMode>? DisplayModeSelected;
+    public event EventHandler<UiCulturePreference>? LanguageSelected;
 
     public void SetTitle(string title) => _icon.ToolTipText = title;
 
@@ -212,6 +238,11 @@ public sealed class TrayController : IDisposable
     public void SetDisplayMode(DisplayMode mode)
     {
         foreach (var pair in _modeItems) pair.Value.IsChecked = pair.Key == mode;
+    }
+
+    public void SetLanguage(UiCulturePreference preference)
+    {
+        foreach (var pair in _languageItems) pair.Value.IsChecked = pair.Key == preference;
     }
 
     public void UpdateKeyboards(IReadOnlyList<CompatibleKeyboard> keyboards)

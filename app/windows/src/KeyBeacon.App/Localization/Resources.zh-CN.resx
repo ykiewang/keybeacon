@@ -51,6 +51,18 @@
   <data name="Menu_Quit" xml:space="preserve">
     <value>退出</value>
   </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>语言</value>
+  </data>
+  <data name="Menu_LanguageSystem" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Menu_LanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Menu_LanguageChinese" xml:space="preserve">
+    <value>中文</value>
+  </data>
   <data name="Menu_ShowPanel" xml:space="preserve">
     <value>显示浮窗</value>
   </data>
@@ -192,5 +204,11 @@
   </data>
   <data name="Dialog_OSUnsupported" xml:space="preserve">
     <value>KeyBeacon 需要 Windows 10 版本 2004（build 19041）或更高版本。</value>
+  </data>
+  <data name="Dialog_Ok" xml:space="preserve">
+    <value>确定</value>
+  </data>
+  <data name="Dialog_Cancel" xml:space="preserve">
+    <value>取消</value>
   </data>
 </root>

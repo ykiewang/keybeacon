@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
         AppSettings().migrateIfNeeded()
 
+        // Resolve the persisted language preference once, before any UI string
+        // is built (FR-002 / FR-004).
+        L10n.currentLanguage = AppSettings().resolvedLanguage
+
         panel = FloatingPanel()
         if AppSettings().panelVisible {
             panel.orderFrontRegardless()
@@ -41,9 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         if let active = activeKeyboard {
             headerTitle = active.displayName
         } else if !unsupportedKeyboards.isEmpty {
-            headerTitle = "⚠︎ 不受支持的键盘协议版本"
+            headerTitle = L10n.text("Header_Unsupported")
         } else {
-            headerTitle = "未连接键盘"
+            headerTitle = L10n.text("Header_NoKeyboard")
         }
         let header = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         header.isEnabled = false
@@ -52,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         if activeKeyboard == nil, !unsupportedKeyboards.isEmpty {
             let names = unsupportedKeyboards.map { $0.displayName }.joined(separator: ", ")
             let info = NSMenuItem(
-                title: "检测到较新的 KeyBeacon 协议(\(names));请升级本应用后使用。",
+                title: L10n.format("Info_UnsupportedNames", names),
                 action: nil, keyEquivalent: ""
             )
             info.isEnabled = false
@@ -60,10 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         }
         menu.addItem(.separator())
 
-        let chooser = NSMenuItem(title: "键盘", action: nil, keyEquivalent: "")
+        let chooser = NSMenuItem(title: L10n.text("Menu_Keyboard"), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         if candidates.isEmpty {
-            let none = NSMenuItem(title: "无可用键盘", action: nil, keyEquivalent: "")
+            let none = NSMenuItem(title: L10n.text("Menu_NoKeyboards"), action: nil, keyEquivalent: "")
             none.isEnabled = false
             submenu.addItem(none)
         } else {
@@ -83,12 +87,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         menu.addItem(.separator())
 
         menu.addItem(
-            NSMenuItem(title: "重连", action: #selector(reconnect), keyEquivalent: "r")
+            NSMenuItem(title: L10n.text("Menu_Reconnect"), action: #selector(reconnect), keyEquivalent: "r")
         )
 
         // Panel visibility toggle (persisted). Checkmark reflects current state.
         let showPanelItem = NSMenuItem(
-            title: "显示浮窗",
+            title: L10n.text("Menu_ShowPanel"),
             action: #selector(togglePanelVisible), keyEquivalent: ""
         )
         showPanelItem.target = self
@@ -97,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
         menu.addItem(
             NSMenuItem(
-                title: "锁定 / 穿透",
+                title: L10n.text("Menu_Lock"),
                 action: #selector(toggleLock), keyEquivalent: "l"
             )
         )
@@ -105,12 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         // "Pin to corner" submenu — anchors the panel to a visible-frame
         // corner of its current screen so it never drifts when the user
         // switches active window to another display.
-        let pinChooser = NSMenuItem(title: "钉到角落", action: nil, keyEquivalent: "")
+        let pinChooser = NSMenuItem(title: L10n.text("Menu_PinCorner"), action: nil, keyEquivalent: "")
         let pinSubmenu = NSMenu()
         let currentPin = panel.pinnedCorner
 
         let offItem = NSMenuItem(
-            title: "关闭（记忆位置）",
+            title: L10n.text("Menu_PinOff"),
             action: #selector(setPinOff), keyEquivalent: ""
         )
         offItem.target = self
@@ -132,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         menu.addItem(pinChooser)
 
         // "Display mode" submenu — 完整 (multi-row card) / 精简 (single-row).
-        let modeChooser = NSMenuItem(title: "显示模式", action: nil, keyEquivalent: "")
+        let modeChooser = NSMenuItem(title: L10n.text("Menu_DisplayMode"), action: nil, keyEquivalent: "")
         let modeSubmenu = NSMenu()
         let currentMode = panel.displayMode
         for mode in DisplayMode.allCases {
@@ -148,9 +152,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         modeChooser.submenu = modeSubmenu
         menu.addItem(modeChooser)
 
+        // "Language" submenu — 跟随系统 / 中文 / English (FR-005 / FR-012).
+        let languageChooser = NSMenuItem(title: L10n.text("Menu_Language"), action: nil, keyEquivalent: "")
+        let languageSubmenu = NSMenu()
+        let currentPreference = AppSettings().languagePreference
+        for preference in LanguagePreference.allCases {
+            let item = NSMenuItem(
+                title: preference.displayName,
+                action: #selector(setLanguage(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = preference.rawValue
+            item.state = (currentPreference == preference) ? .on : .off
+            languageSubmenu.addItem(item)
+        }
+        languageChooser.submenu = languageSubmenu
+        menu.addItem(languageChooser)
+
         menu.addItem(.separator())
         menu.addItem(
-            NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
+            NSMenuItem(title: L10n.text("Menu_Quit"), action: #selector(quit), keyEquivalent: "q")
         )
         for item in menu.items where item.action != nil { item.target = self }
         statusItem.menu = menu
@@ -216,6 +237,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         buildMenu()
     }
 
+    /// Persist the language preference and rebuild every visible surface
+    /// immediately — no restart (FR-003 / FR-011).
+    @objc private func setLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let pref = LanguagePreference(rawValue: raw)
+        else { return }
+        let settings = AppSettings()
+        settings.languagePreference = pref
+        L10n.currentLanguage = settings.resolvedLanguage
+        panel.applyLanguage()
+        buildMenu()
+    }
+
     @objc private func selectKeyboard(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         client.select(id)
@@ -253,7 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
     func bleClient(_ client: BLEClient, didDetectUnsupported keyboards: [CompatibleKeyboard]) {
         unsupportedKeyboards = keyboards
-        statusItem.button?.toolTip = "检测到不受支持的 KeyBeacon 协议版本;请升级本应用。"
+        statusItem.button?.toolTip = L10n.text("Tip_Unsupported")
         buildMenu()
     }
 
