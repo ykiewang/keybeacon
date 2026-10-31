@@ -1,27 +1,62 @@
 name: release
 
-# Build a downloadable macOS artifact on tag `app-vX.Y.Z` (US1 / FR-001).
+# Unified downloadable release for macOS + Windows on tag `app-v*`.
 #
-# Fail-safe ordering (contract release-artifact.md §2): build → test → assemble →
-# [sign + notarize, CONDITIONAL] → checksum → publish. Any gated step failing means
-# NO Release is published (Principle V; covers the "signing/notarization outage or
-# cert expiry" edge case).
+# Structure (single source of truth for trigger, version and notes):
+#   meta    → derive version + whether this ref is a real release tag
+#   macos   → swift build/test → [sign + notarize, CONDITIONAL] → upload-artifact
+#   windows → matrix win-x64/win-arm64, self-contained single-file → upload-artifact
+#   publish → gather artifacts → ONE GitHub Release with unified notes
 #
-# Signing/notarization is INERT this iteration: the steps run ONLY when the
-# ZMK-Studio-aligned Developer ID secrets are present. With no secrets the artifact
-# is published UNSIGNED (signing_state=unsigned) and the first-open workaround is in
-# the notes/README. SC-001/SC-002/FR-002 are explicitly NOT met this iteration.
+# Resilience: publish runs with `if: always()` and ships whatever built, so a
+# failure on one platform never blocks the other's release (it fails only if
+# BOTH platforms produced nothing). Because a single job creates the release,
+# there is no cross-workflow create-race or polling.
+#
+# Fail-safe signing (Principle V): macOS signing/notarization runs ONLY when the
+# Developer ID secrets are present; with no secrets the build publishes UNSIGNED
+# and the first-open workaround is in the notes/README. Windows is unsigned this
+# iteration (SmartScreen prompt). Signing is a follow-up.
+#
+# workflow_dispatch builds both platforms WITHOUT publishing a Release (artifacts
+# are attached to the run), so the whole pipeline can be dry-run from the Actions
+# tab before cutting a tag.
 
 on:
   push:
     tags:
       - 'app-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for a dry-run build (no GitHub Release is published)'
+        required: false
+        default: '0.0.0-dev'
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_release: ${{ steps.v.outputs.is_release }}
+    steps:
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/app-v* ]]; then
+            echo "version=${GITHUB_REF_NAME#app-v}" >> "$GITHUB_OUTPUT"   # app-v1.2.3 -> 1.2.3
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            v="${{ github.event.inputs.version }}"
+            [[ -z "$v" ]] && v="0.0.0-dev"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  macos:
+    needs: meta
     runs-on: macos-14
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -30,16 +65,14 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    outputs:
+      signing_state: ${{ steps.sign.outputs.signing_state }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Derive version & signing state from tag/secrets
-        id: meta
+      - name: Derive signing state from secrets
+        id: sign
         run: |
-          tag="${GITHUB_REF_NAME}"              # e.g. app-v0.1.0
-          ver="${tag#app-v}"
-          echo "tag=$tag"             >> "$GITHUB_OUTPUT"
-          echo "app_version=$ver"     >> "$GITHUB_OUTPUT"
           if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
             echo "signing_state=signed" >> "$GITHUB_OUTPUT"
           else
@@ -71,69 +104,182 @@ jobs:
 
       - name: Assemble bundle (gate — must assemble; codesigns iff identity present)
         run: |
-          ./packaging/make-app.sh "${{ steps.meta.outputs.app_version }}"
+          ./packaging/make-app.sh "${{ needs.meta.outputs.version }}"
 
       # ---- Notarize + staple (CONDITIONAL; fail-safe) ----
       - name: Notarize & staple (skipped when no secrets)
         if: ${{ env.APPLE_SIGNING_IDENTITY != '' }}
         run: |
           set -euo pipefail
-          VER="${{ steps.meta.outputs.app_version }}"
+          VER="${{ needs.meta.outputs.version }}"
           cd dist
-          # Submit the .dmg (bundle inside) and WAIT; non-zero result fails the job.
           xcrun notarytool submit "BleWidget-$VER.dmg" \
             --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
             --wait
-          # Staple the ticket onto the app and the dmg, then refresh the zip + checksums.
           xcrun stapler staple "BleWidget.app"
           xcrun stapler staple "BleWidget-$VER.dmg"
           rm -f "BleWidget-$VER.zip"
           ditto -c -k --keepParent "BleWidget.app" "BleWidget-$VER.zip"
           shasum -a 256 "BleWidget-$VER.zip" "BleWidget-$VER.dmg" > "BleWidget-$VER.sha256"
 
-      - name: Write release notes
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dist
+          path: |
+            dist/BleWidget-*.dmg
+            dist/BleWidget-*.zip
+            dist/BleWidget-*.sha256
+          if-no-files-found: error
+
+  windows:
+    needs: meta
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish (self-contained single file)
+        shell: pwsh
+        working-directory: app/windows
+        run: |
+          dotnet publish src/KeyBeacon.App/KeyBeacon.App.csproj `
+            -c Release -r ${{ matrix.rid }} --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none -p:DebugSymbols=false `
+            -p:Version=${{ needs.meta.outputs.version }} `
+            -p:TreatWarningsAsErrors=false `
+            -o publish/${{ matrix.rid }}
+
+      - name: Package zip + sha256
+        shell: pwsh
+        working-directory: app/windows
+        run: |
+          $ver = '${{ needs.meta.outputs.version }}'
+          $rid = '${{ matrix.rid }}'
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $zip = "KeyBeacon-$rid-$ver.zip"
+          Compress-Archive -Path "publish/$rid/*" -DestinationPath "dist/$zip" -Force
+          $hash = (Get-FileHash "dist/$zip" -Algorithm SHA256).Hash.ToLower()
+          # LF-only, two-space separator so `sha256sum -c` works on Linux/macOS.
+          [IO.File]::WriteAllText("dist/$zip.sha256", "$hash  $zip`n")
+          Get-ChildItem dist
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.rid }}
+          path: app/windows/dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [meta, macos, windows]
+    if: ${{ always() && needs.meta.outputs.is_release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect assets & detect platforms
+        id: collect
+        run: |
+          set -euo pipefail
+          echo "--- dist ---"; ls -l dist || true
+          count=$(find dist -type f 2>/dev/null | wc -l | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if ls dist/BleWidget-* >/dev/null 2>&1; then echo "has_macos=true" >> "$GITHUB_OUTPUT"; else echo "has_macos=false" >> "$GITHUB_OUTPUT"; fi
+          if ls dist/KeyBeacon-win-* >/dev/null 2>&1; then echo "has_windows=true" >> "$GITHUB_OUTPUT"; else echo "has_windows=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Fail if no platform produced artifacts
+        if: ${{ steps.collect.outputs.count == '0' }}
+        run: |
+          echo "ERROR: both macOS and Windows builds failed — nothing to publish"
+          exit 1
+
+      - name: Write unified release notes
         id: notes
         run: |
-          VER="${{ steps.meta.outputs.app_version }}"
-          STATE="${{ steps.meta.outputs.signing_state }}"
-          NOTES="$RUNNER_TEMP/notes.md"
+          VER="${{ needs.meta.outputs.version }}"
+          STATE="${{ needs.macos.outputs.signing_state }}"; [ -z "$STATE" ] && STATE="unsigned"
+          HAS_MAC="${{ steps.collect.outputs.has_macos }}"
+          HAS_WIN="${{ steps.collect.outputs.has_windows }}"
           {
-            echo "## KeyBeacon (BleWidget) $VER"
+            echo "## KeyBeacon $VER"
             echo
             echo "| Field | Value |"
             echo "|-------|-------|"
             echo "| \`app_version\` | $VER |"
             echo "| \`supported_kbp\` | KBP 1.x — service UUID \`AA440AA0-F5ED-4C48-84A1-8062D20D3D55\` |"
             echo "| \`min_macos\` | 12.0 |"
-            echo "| \`signing_state\` | $STATE |"
+            echo "| \`min_windows\` | 10 (build 19041) / 11 |"
+            echo "| \`signing_state\` | macOS=$STATE, Windows=unsigned |"
             echo
-            if [[ "$STATE" == "unsigned" ]]; then
-              echo "### First open (unsigned build)"
+            echo "### Downloads"
+            echo
+            if [ "$HAS_MAC" = "true" ]; then
+              echo "- **macOS:** \`BleWidget-$VER.dmg\` (or \`.zip\`) — verify with \`BleWidget-$VER.sha256\`"
+            fi
+            if [ "$HAS_WIN" = "true" ]; then
+              echo "- **Windows x64:** \`KeyBeacon-win-x64-$VER.zip\` — verify with \`KeyBeacon-win-x64-$VER.zip.sha256\`"
+              echo "- **Windows ARM64:** \`KeyBeacon-win-arm64-$VER.zip\` — verify with \`KeyBeacon-win-arm64-$VER.zip.sha256\`"
               echo
-              echo "Because this build is unsigned, macOS quarantines the download. **Drag BleWidget.app out of the \`.dmg\` and eject the disk image first** — you can't clear the quarantine flag while the app sits on the read-only image. Then handle whichever prompt you get:"
-              echo
-              echo "- **\"BleWidget can't be opened because it is from an unidentified developer\"** → right-click the app → **Open** → confirm once."
-              echo "- **\"BleWidget is damaged and can't be opened. You should eject the disk image.\"** (common on Apple Silicon) → the right-click trick won't work; clear the flag once in Terminal (adjust the path to where you moved the app): \`xattr -cr /Applications/BleWidget.app\`"
-              echo
-              echo "> **Known limitation:** because this build is unsigned, spec **SC-001/SC-002** (zero-warning, under-5-minutes) and **FR-002** (signed + notarized) are **NOT met this iteration** — deferred to a signed-release follow-up once a Developer ID is in place. Download, run, and live status work today."
-            else
-              echo "> Signed + notarized build — no Gatekeeper workaround needed."
+              echo "The Windows builds are **self-contained single-file** executables — no .NET runtime install needed. Unzip and run \`KeyBeacon.exe\`."
             fi
             echo
-            echo "**Download:** \`BleWidget-$VER.dmg\` (or \`.zip\`); verify with \`BleWidget-$VER.sha256\`."
+            if [ "$HAS_MAC" = "true" ] && [ "$STATE" = "unsigned" ]; then
+              echo "### First open — macOS (unsigned build)"
+              echo
+              echo "Because this build is unsigned, macOS quarantines the download. **Drag BleWidget.app out of the \`.dmg\` and eject the disk image first** — you can't clear the quarantine flag while the app sits on the read-only image. Then:"
+              echo
+              echo "- **\"BleWidget can't be opened because it is from an unidentified developer\"** → right-click the app → **Open** → confirm once."
+              echo "- **\"BleWidget is damaged and can't be opened. You should eject the disk image.\"** (common on Apple Silicon) → clear the flag once in Terminal: \`xattr -cr /Applications/BleWidget.app\`"
+              echo
+            fi
+            if [ "$HAS_WIN" = "true" ]; then
+              echo "### First run — Windows (unsigned build)"
+              echo
+              echo "Because this build isn't code-signed, Windows SmartScreen warns on first launch. Clear it once:"
+              echo
+              echo "- **\"Windows protected your PC\"** (SmartScreen) → click **More info** → **Run anyway**."
+              echo "- If the download is marked blocked: right-click \`KeyBeacon.exe\` → **Properties** → tick **Unblock** → **OK** (or in PowerShell: \`Unblock-File .\\KeyBeacon.exe\`)."
+              echo
+              echo "KeyBeacon lives in the **system tray** (no taskbar window) — look for the **K** icon, possibly under the \`^\` overflow arrow. Left-click toggles the floating panel; right-click opens the menu."
+              echo
+            fi
+            echo "> **Known limitation:** unsigned this iteration (macOS SC-001/SC-002/FR-002 not met; Windows SmartScreen prompt) — deferred to a signed-release follow-up. Download, run, and live status work today."
             echo
-            echo "_Platform: macOS and Windows (x64 + arm64) available; Linux planned for a later iteration._"
-          } > "$NOTES"
-          echo "path=$NOTES" >> "$GITHUB_OUTPUT"
+            echo "_Platform: macOS and Windows (x64 + arm64); Linux planned for a later iteration._"
+          } > notes.md
+          echo "--- notes.md ---"; cat notes.md
 
-      - name: Create GitHub Release & upload artifacts
+      - name: Create / update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VER="${{ steps.meta.outputs.app_version }}"
-          gh release create "${{ steps.meta.outputs.tag }}" \
-            --title "KeyBeacon $VER" \
-            --notes-file "${{ steps.notes.outputs.path }}" \
-            "dist/BleWidget-$VER.dmg" \
-            "dist/BleWidget-$VER.zip" \
-            "dist/BleWidget-$VER.sha256"
+          set -euo pipefail
+          VER="${{ needs.meta.outputs.version }}"
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          PRE=""
+          case "$VER" in *-*) PRE="--prerelease";; esac
+          # Single creator — no race. This job doesn't checkout the repo, so pass
+          # --repo explicitly (gh otherwise needs a local git remote).
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$REPO" --title "KeyBeacon $VER" --notes-file notes.md $PRE
+            gh release upload "$TAG" --repo "$REPO" --clobber dist/*
+          else
+            gh release create "$TAG" --repo "$REPO" --title "KeyBeacon $VER" --notes-file notes.md $PRE dist/*
+          fi
+          echo "published release $TAG"
