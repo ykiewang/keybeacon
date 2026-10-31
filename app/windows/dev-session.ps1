@@ -86,10 +86,22 @@ function Invoke-Native {
         $ErrorActionPreference = $prev
     }
     if ($LogPath) {
-        $all | ForEach-Object { $_.ToString() } | Set-Content -Path $LogPath -Encoding UTF8 -Append
+        $all | ForEach-Object { $_.ToString() } | Add-Content -Path $LogPath -Encoding UTF8
     }
     $all | ForEach-Object { Write-Host $_ }
     return $code
+}
+
+function Get-NativeOutput {
+    param([string]$Exe, [string[]]$ExeArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = (& $Exe @ExeArgs 2>$null | Out-String).Trim()
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return $out
 }
 
 function Collect-Diagnostics {
@@ -168,7 +180,7 @@ function Check-Prereqs {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         ErrM "git not found. Install: https://git-scm.com/download/win"
         $gate = $false
-    } else { OkM ("git " + ((& git --version *>&1) -replace '^git version ', '')) }
+    } else { OkM ("git " + ((Get-NativeOutput 'git' @('--version')) -replace '^git version ', '')) }
 
     if ($env:WSL_DISTRO_NAME) {
         ErrM "You are inside WSL ($env:WSL_DISTRO_NAME). Run this in NATIVE Windows PowerShell, not WSL."
@@ -195,7 +207,7 @@ function Sync-Repo {
         if ($code -ne 0) { ErrM "git fetch failed."; Record 'fetch' $code (Join-Path $DiagDir 'fetch.log'); return $false }
     }
 
-    $cur = ((& git rev-parse --abbrev-ref HEAD 2>$null) | Out-String).Trim()
+    $cur = Get-NativeOutput 'git' @('rev-parse', '--abbrev-ref', 'HEAD')
     if ($cur -ne $Branch) {
         $code = Invoke-Native 'git' @('checkout', $Branch) (Join-Path $DiagDir 'checkout.log')
         if ($code -ne 0) {
@@ -209,7 +221,7 @@ function Sync-Repo {
         if ($code -ne 0) { Warn "git pull --ff-only failed; continuing with local HEAD." }
     }
 
-    $sha = ((& git rev-parse --short HEAD 2>$null) | Out-String).Trim()
+    $sha = Get-NativeOutput 'git' @('rev-parse', '--short', 'HEAD')
     OkM "On $Branch @ $sha"
     return $true
 }
