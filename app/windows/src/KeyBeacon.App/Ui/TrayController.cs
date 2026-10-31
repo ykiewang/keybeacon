@@ -21,11 +21,11 @@ namespace KeyBeacon.App.Ui;
 public sealed class TrayController : IDisposable
 {
     private readonly TaskbarIcon _icon;
-    private readonly LocalizationService _loc;
+    private LocalizationService _loc;
     private readonly AppSettings _settings;
-    private readonly MenuItem _keyboardsRoot;
-    private readonly MenuItem _verboseItem;
-    private readonly MenuItem _showPanelItem;
+    private MenuItem _keyboardsRoot = null!;
+    private MenuItem _verboseItem = null!;
+    private MenuItem _showPanelItem = null!;
 
     // Radio groups. Pins use a list because a Dictionary cannot key on a null
     // (nullable-enum) value — null is the "off / remember position" entry.
@@ -40,56 +40,10 @@ public sealed class TrayController : IDisposable
         _loc = loc;
         _settings = settings;
 
-        _keyboardsRoot = new MenuItem { Header = loc.Get("Menu_Keyboard") };
-
-        _showPanelItem = new MenuItem
-        {
-            Header = loc.Get("Menu_ShowPanel"),
-            IsCheckable = true,
-            IsChecked = settings.PanelVisible
-        };
-        _showPanelItem.Click += (_, _) => TogglePanelRequested?.Invoke(this, EventArgs.Empty);
-
-        var reconnect = new MenuItem { Header = loc.Get("Menu_Reconnect") };
-        reconnect.Click += (_, _) => ReconnectRequested?.Invoke(this, EventArgs.Empty);
-
-        var pinRoot = BuildPinMenu();
-        var modeRoot = BuildModeMenu();
-        var languageRoot = BuildLanguageMenu();
-
-        _verboseItem = new MenuItem
-        {
-            Header = loc.Get("Menu_VerboseLogging"),
-            IsCheckable = true,
-            IsChecked = settings.VerboseLogging
-        };
-        _verboseItem.Click += (_, _) => VerboseLoggingToggled?.Invoke(this, _verboseItem.IsChecked);
-
-        var export = new MenuItem { Header = loc.Get("Menu_ExportDiagnostics") };
-        export.Click += (_, _) => ExportDiagnosticsRequested?.Invoke(this, EventArgs.Empty);
-
-        var quit = new MenuItem { Header = loc.Get("Menu_Quit") };
-        quit.Click += (_, _) => QuitRequested?.Invoke(this, EventArgs.Empty);
-
-        var menu = new ContextMenu();
-        menu.Items.Add(_keyboardsRoot);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(_showPanelItem);
-        menu.Items.Add(reconnect);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(pinRoot);
-        menu.Items.Add(modeRoot);
-        menu.Items.Add(languageRoot);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(_verboseItem);
-        menu.Items.Add(export);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(quit);
-
         _icon = new TaskbarIcon
         {
             ToolTipText = loc.Get("AppName"),
-            ContextMenu = menu,
+            ContextMenu = BuildMenu(),
             Visibility = Visibility.Visible
         };
 
@@ -116,6 +70,84 @@ public sealed class TrayController : IDisposable
 
         SetPinnedCorner(settings.PinnedCorner);
         SetDisplayMode(settings.DisplayMode);
+        UpdateKeyboardsMenu();
+    }
+
+    /// <summary>
+    /// Builds (or rebuilds) the right-click menu from the current
+    /// <see cref="_loc"/>. The checkable-group backing collections are cleared
+    /// first so a rebuild after a language change does not accumulate stale
+    /// menu items.
+    /// </summary>
+    private ContextMenu BuildMenu()
+    {
+        _pinItems.Clear();
+        _modeItems.Clear();
+        _languageItems.Clear();
+
+        _keyboardsRoot = new MenuItem { Header = _loc.Get("Menu_Keyboard") };
+
+        _showPanelItem = new MenuItem
+        {
+            Header = _loc.Get("Menu_ShowPanel"),
+            IsCheckable = true,
+            IsChecked = _settings.PanelVisible
+        };
+        _showPanelItem.Click += (_, _) => TogglePanelRequested?.Invoke(this, EventArgs.Empty);
+
+        var reconnect = new MenuItem { Header = _loc.Get("Menu_Reconnect") };
+        reconnect.Click += (_, _) => ReconnectRequested?.Invoke(this, EventArgs.Empty);
+
+        var pinRoot = BuildPinMenu();
+        var modeRoot = BuildModeMenu();
+        var languageRoot = BuildLanguageMenu();
+
+        _verboseItem = new MenuItem
+        {
+            Header = _loc.Get("Menu_VerboseLogging"),
+            IsCheckable = true,
+            IsChecked = _settings.VerboseLogging
+        };
+        _verboseItem.Click += (_, _) => VerboseLoggingToggled?.Invoke(this, _verboseItem.IsChecked);
+
+        var export = new MenuItem { Header = _loc.Get("Menu_ExportDiagnostics") };
+        export.Click += (_, _) => ExportDiagnosticsRequested?.Invoke(this, EventArgs.Empty);
+
+        var quit = new MenuItem { Header = _loc.Get("Menu_Quit") };
+        quit.Click += (_, _) => QuitRequested?.Invoke(this, EventArgs.Empty);
+
+        var menu = new ContextMenu();
+        menu.Items.Add(_keyboardsRoot);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(_showPanelItem);
+        menu.Items.Add(reconnect);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(pinRoot);
+        menu.Items.Add(modeRoot);
+        menu.Items.Add(languageRoot);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(_verboseItem);
+        menu.Items.Add(export);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(quit);
+        return menu;
+    }
+
+    /// <summary>
+    /// Re-applies the menu labels after a UI-language change WITHOUT recreating
+    /// the <see cref="TaskbarIcon"/>. Rebuilding the icon is unsafe: two
+    /// TaskbarIcon instances share one shell notification id, so disposing the
+    /// old one issues NIM_DELETE for that id and removes the freshly-created
+    /// icon's glyph (the icon vanishes from the tray). Only the ContextMenu is
+    /// swapped; the icon registration and tooltip are left untouched.
+    /// </summary>
+    public void ApplyLocalization(LocalizationService loc)
+    {
+        _loc = loc;
+        _icon.ContextMenu = BuildMenu();
+        SetPinnedCorner(_settings.PinnedCorner);
+        SetDisplayMode(_settings.DisplayMode);
+        SetLanguage(_settings.UICulture);
         UpdateKeyboardsMenu();
     }
 

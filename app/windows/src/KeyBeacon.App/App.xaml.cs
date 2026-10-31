@@ -282,12 +282,10 @@ public partial class App : Application
             _tray!.SetTitle(snapshot.KeyboardDisplayName ?? _loc.Get("AppName"));
         }
 
-        // Rebuild the tray menu with the new culture's labels; the old icon is
-        // disposed after the new menu is wired (deferred to avoid tearing down
-        // the tray during this click callback).
-        var oldTray = _tray;
-        BuildTray();
-        Dispatcher.BeginInvoke(new Action(() => oldTray?.Dispose()), DispatcherPriority.Background);
+        // Re-label the tray menu in place. The TaskbarIcon is deliberately NOT
+        // recreated: two instances share one shell icon id, so disposing the old
+        // one would delete the new one's glyph and the icon would disappear.
+        _tray!.ApplyLocalization(_loc);
     }
 
     private void Post(Action action) => Dispatcher.BeginInvoke(action, DispatcherPriority.Normal);
