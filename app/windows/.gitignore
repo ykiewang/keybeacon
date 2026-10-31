@@ -1,0 +1,43 @@
+# .NET build outputs
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+
+# Test results / coverage
+TestResults/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Root .gitignore uses *.app for macOS bundles; it wrongly matches the
+# KeyBeacon.App/ project directory. Re-include it (and the dir must be
+# un-ignored before its contents per git rules).
+!src/KeyBeacon.App/

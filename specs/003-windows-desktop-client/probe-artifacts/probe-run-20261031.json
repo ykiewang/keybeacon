@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-10-31T04:14:26.5678970\u002B00:00",
+  "host": {
+    "os_version": "Microsoft Windows NT 10.0.26100.0",
+    "arch": "X64",
+    "dotnet": "8.0.33"
+  },
+  "checks": {
+    "p1_mta": {
+      "pass": true,
+      "detail": "apartment=MTA",
+      "elapsed_ms": null,
+      "data": {}
+    },
+    "p2_enumerate": {
+      "pass": true,
+      "detail": null,
+      "elapsed_ms": 197,
+      "data": {
+        "devices": [
+          {
+            "id": "BluetoothLE#BluetoothLE74:e5:f9:9b:1a:c1-cb:e3:c4:10:be:53",
+            "name": "TOTEM"
+          }
+        ]
+      }
+    },
+    "p4_services": {
+      "pass": true,
+      "detail": null,
+      "elapsed_ms": 461,
+      "data": {
+        "classify": "Supported",
+        "device_id": "BluetoothLE#BluetoothLE74:e5:f9:9b:1a:c1-cb:e3:c4:10:be:53",
+        "chars": "AA1,AA2,AA3"
+      }
+    },
+    "p3_hid_coexist": {
+      "pass": true,
+      "detail": "GATT session established; confirm typing is uninterrupted (operator-confirmed)",
+      "elapsed_ms": null,
+      "data": {}
+    },
+    "p5_read_subscribe": {
+      "pass": true,
+      "detail": null,
+      "elapsed_ms": 11452,
+      "data": {
+        "first_notify_hex": "000042415345",
+        "parsed_layer": "BASE",
+        "mods": "none"
+      }
+    },
+    "p6_stale_timeout": {
+      "pass": true,
+      "detail": "non-blocking; records observed per-call latency",
+      "elapsed_ms": null,
+      "data": {
+        "observed_max_ms": 11452,
+        "timeout_ms": 10000
+      }
+    }
+  },
+  "verdict": "PASS"
+}

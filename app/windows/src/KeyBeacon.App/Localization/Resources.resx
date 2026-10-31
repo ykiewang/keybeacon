@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="AppName" xml:space="preserve">
+    <value>KeyBeacon</value>
+  </data>
+  <data name="Menu_Reconnect" xml:space="preserve">
+    <value>Reconnect</value>
+  </data>
+  <data name="Menu_Quit" xml:space="preserve">
+    <value>Quit</value>
+  </data>
+  <data name="Menu_ShowPanel" xml:space="preserve">
+    <value>Show Floating Panel</value>
+  </data>
+  <data name="Menu_VerboseLogging" xml:space="preserve">
+    <value>Verbose Logging</value>
+  </data>
+  <data name="Menu_ExportDiagnostics" xml:space="preserve">
+    <value>Export Diagnostics…</value>
+  </data>
+  <data name="Menu_Keyboard" xml:space="preserve">
+    <value>Keyboard</value>
+  </data>
+  <data name="Menu_NoKeyboards" xml:space="preserve">
+    <value>No compatible keyboards</value>
+  </data>
+  <data name="Menu_DisplayFull" xml:space="preserve">
+    <value>Full</value>
+  </data>
+  <data name="Menu_DisplayCompact" xml:space="preserve">
+    <value>Compact</value>
+  </data>
+  <data name="Menu_DisplayMode" xml:space="preserve">
+    <value>Display Mode</value>
+  </data>
+  <data name="Menu_PinCorner" xml:space="preserve">
+    <value>Pin to Corner</value>
+  </data>
+  <data name="Menu_PinOff" xml:space="preserve">
+    <value>Off (remember position)</value>
+  </data>
+  <data name="Corner_TopLeft" xml:space="preserve">
+    <value>Top-left</value>
+  </data>
+  <data name="Corner_TopRight" xml:space="preserve">
+    <value>Top-right</value>
+  </data>
+  <data name="Corner_BottomLeft" xml:space="preserve">
+    <value>Bottom-left</value>
+  </data>
+  <data name="Corner_BottomRight" xml:space="preserve">
+    <value>Bottom-right</value>
+  </data>
+
+  <data name="State_Disconnected" xml:space="preserve">
+    <value>Disconnected</value>
+  </data>
+  <data name="State_BluetoothUnavailable" xml:space="preserve">
+    <value>Bluetooth unavailable</value>
+  </data>
+  <data name="State_NoKeyboard" xml:space="preserve">
+    <value>No keyboard available</value>
+  </data>
+  <data name="State_UnsupportedVersion" xml:space="preserve">
+    <value>Unsupported protocol version</value>
+  </data>
+  <data name="State_Connecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="State_UpdatedAt" xml:space="preserve">
+    <value>updated {0}</value>
+  </data>
+
+  <data name="Mod_Shift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="Mod_Control" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="Mod_Alt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="Mod_Gui" xml:space="preserve">
+    <value>Win</value>
+  </data>
+  <data name="Layer_Fallback" xml:space="preserve">
+    <value>L{0}</value>
+  </data>
+
+  <data name="Conn_HostLink" xml:space="preserve">
+    <value>Host link</value>
+  </data>
+  <data name="Conn_Profile" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Conn_SplitLeft" xml:space="preserve">
+    <value>Left half</value>
+  </data>
+  <data name="Conn_SplitRight" xml:space="preserve">
+    <value>Right half</value>
+  </data>
+  <data name="Conn_Output" xml:space="preserve">
+    <value>Output</value>
+  </data>
+  <data name="Conn_Charging" xml:space="preserve">
+    <value>Charging</value>
+  </data>
+  <data name="Conn_Online" xml:space="preserve">
+    <value>online</value>
+  </data>
+  <data name="Conn_Offline" xml:space="preserve">
+    <value>offline</value>
+  </data>
+  <data name="Output_Usb" xml:space="preserve">
+    <value>USB</value>
+  </data>
+  <data name="Output_Ble" xml:space="preserve">
+    <value>BLE</value>
+  </data>
+  <data name="Output_Unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Battery_Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Battery_Right" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="Battery_Unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="Battery_Percent" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+
+  <data name="Dialog_ExportTitle" xml:space="preserve">
+    <value>Export Diagnostics</value>
+  </data>
+  <data name="Dialog_ExportReview" xml:space="preserve">
+    <value>The bundle will include: application and OS version, detected protocol version, keyboard summary, and recent logs. Bluetooth addresses and keyboard identifiers are omitted. Device names are masked by default. Continue?</value>
+  </data>
+  <data name="Dialog_ExportIncludeNames" xml:space="preserve">
+    <value>Include full keyboard device names</value>
+  </data>
+  <data name="Dialog_ExportDone" xml:space="preserve">
+    <value>Diagnostics written to:\n{0}</value>
+  </data>
+  <data name="Dialog_ExportFailed" xml:space="preserve">
+    <value>Could not export diagnostics: {0}</value>
+  </data>
+  <data name="Dialog_OSUnsupported" xml:space="preserve">
+    <value>KeyBeacon requires Windows 10 version 2004 (build 19041) or later.</value>
+  </data>
+</root>

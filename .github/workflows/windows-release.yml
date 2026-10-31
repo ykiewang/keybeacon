@@ -1,0 +1,122 @@
+name: windows-release
+
+# Build a downloadable Windows artifact on tag `app-v*` (spec 003), alongside the
+# macOS job in release.yml. Self-contained single-file .exe for win-x64 + win-arm64
+# so end users need no .NET runtime install.
+#
+# Isolation: this workflow NEVER modifies the macOS job. On an `app-v*` tag the
+# `release` job waits for release.yml to create the GitHub Release, then uploads
+# the Windows assets to that same release with `--clobber` (idempotent; no
+# create-race). If the release is absent after the wait (Windows-only tag or a
+# failed macOS job) it creates one as a fallback.
+#
+# workflow_dispatch builds the same artifacts WITHOUT publishing a Release, so the
+# build can be dry-run from the Actions tab and the .exe downloaded for testing.
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for a dry-run build (no GitHub Release is created)'
+        required: false
+        default: '0.0.0-dev'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Derive version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/app-v* ]]; then
+            ver="${GITHUB_REF_NAME#app-v}"          # e.g. app-v1.1.0 -> 1.1.0
+          else
+            ver="${{ github.event.inputs.version }}"
+            [[ -z "$ver" ]] && ver="0.0.0-dev"      # branch-push validation build
+          fi
+          echo "app_version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Publish (self-contained single file)
+        shell: pwsh
+        working-directory: app/windows
+        run: |
+          dotnet publish src/KeyBeacon.App/KeyBeacon.App.csproj `
+            -c Release -r ${{ matrix.rid }} --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none -p:DebugSymbols=false `
+            -p:Version=${{ steps.meta.outputs.app_version }} `
+            -p:TreatWarningsAsErrors=false `
+            -o publish/${{ matrix.rid }}
+
+      - name: Package zip + sha256
+        shell: pwsh
+        working-directory: app/windows
+        run: |
+          $ver = '${{ steps.meta.outputs.app_version }}'
+          $rid = '${{ matrix.rid }}'
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $zip = "KeyBeacon-$rid-$ver.zip"
+          Compress-Archive -Path "publish/$rid/*" -DestinationPath "dist/$zip" -Force
+          $hash = (Get-FileHash "dist/$zip" -Algorithm SHA256).Hash.ToLower()
+          # LF-only, two-space separator so `sha256sum -c` works on Linux/macOS.
+          [IO.File]::WriteAllText("dist/$zip.sha256", "$hash  $zip`n")
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KeyBeacon-${{ matrix.rid }}
+          path: app/windows/dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/app-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Ensure release exists, then upload Windows assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#app-v}"
+          # Wait up to ~10 min for release.yml (macOS) to create the Release, so we
+          # attach to the same one instead of racing to create it.
+          for i in $(seq 1 40); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "release $TAG exists"; break
+            fi
+            echo "waiting for release $TAG ($i/40)…"; sleep 15
+          done
+          # Create only as a fallback (no-op if it already exists).
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title "KeyBeacon $VER" \
+            --notes "KeyBeacon $VER — Windows build (self-contained, x64 + arm64)." \
+            2>/dev/null || true
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            dist/*.zip dist/*.sha256
+          echo "uploaded Windows assets to release $TAG"

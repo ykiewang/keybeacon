@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>KeyBeacon.App</RootNamespace>
+    <AssemblyName>KeyBeacon</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
+    <!--
+      Style/perf CA rules relaxed for the platform layer (general catch for BLE
+      resilience, structured logging without LoggerMessage delegates, WinRT async
+      without ConfigureAwait, XAML-instantiated converters). KeyBeacon.Core stays
+      strict since it carries the conformance-tested parsing logic.
+    -->
+    <NoWarn>$(NoWarn);CA1031;CA1848;CA2007;CA1303;CA1812;CA1001;CA2213;CA1816;CA1063;CA1861;CA1002;CA1819;CA1305;CA1304;CA1310;CA1307</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\trayicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KeyBeacon.Core\KeyBeacon.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.1.4" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog" Version="4.0.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>
