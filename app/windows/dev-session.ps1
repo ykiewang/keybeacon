@@ -23,6 +23,7 @@ MODES:
 
 PARAMS:
   -RepoDir   target clone directory (default $HOME\kbd\keybeacon)
+  -Branch    git branch to check out / pull (default feat/windows-ble-probe)
   -NoUpdate  skip git fetch/pull (use code already on disk)
   -Timeout   probe per-op GATT timeout seconds (default 10)
   -Device    probe target DeviceInformation.Id (default: enumerate + pick first)
@@ -37,6 +38,7 @@ param(
     [ValidateSet('all','build','test','probe','diag','app')]
     [string]$Mode = 'all',
     [string]$RepoDir = (Join-Path $HOME 'kbd\keybeacon'),
+    [string]$Branch = 'feat/windows-ble-probe',
     [switch]$NoUpdate,
     [int]$Timeout = 10,
     [string]$Device = ''
@@ -47,7 +49,6 @@ $env:DOTNET_CLI_UI_LANGUAGE   = 'en'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO            = '1'
 $RepoUrl  = 'https://github.com/ykiewang/keybeacon.git'
-$Branch   = 'feat/windows-ble-probe'
 $SlnPath  = 'app/windows/KeyBeacon.sln'
 $TestProj = 'app/windows/tests/KeyBeacon.Core.Tests/KeyBeacon.Core.Tests.csproj'
 $ProbeProj= 'app/windows/tools/KeyBeacon.Probe/KeyBeacon.Probe.csproj'

@@ -16,6 +16,7 @@ EVERY TIME AFTER:
 
 PARAMS (passed through to dev-session.ps1):
   -RepoDir   local clone (default C:\Users\adawy\Documents\kbd\keybeacon)
+  -Branch    git branch to fetch the script from and check out (default feat/windows-ble-probe)
   -Mode      all|build|test|probe|diag  (default all)
   -NoUpdate  skip git fetch/pull
   -Timeout   probe GATT timeout seconds (default 10)
@@ -25,6 +26,7 @@ PARAMS (passed through to dev-session.ps1):
 [CmdletBinding()]
 param(
     [string]$RepoDir = 'C:\Users\adawy\Documents\kbd\keybeacon',
+    [string]$Branch = 'feat/windows-ble-probe',
     [ValidateSet('all','build','test','probe','diag','app')]
     [string]$Mode = 'all',
     [switch]$NoUpdate,
@@ -34,7 +36,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$RawUrl = 'https://raw.githubusercontent.com/ykiewang/keybeacon/feat/windows-ble-probe/app/windows/dev-session.ps1'
+$RawUrl = "https://raw.githubusercontent.com/ykiewang/keybeacon/$Branch/app/windows/dev-session.ps1"
 $Self   = Join-Path $PSScriptRoot 'dev-session.ps1'
 
 Write-Host "==> Updating dev-session.ps1 from GitHub" -ForegroundColor Cyan
@@ -51,7 +53,7 @@ try {
     Write-Host "  [WARN] using existing local copy" -ForegroundColor Yellow
 }
 
-$childArgs = @('-ExecutionPolicy','Bypass','-File',$Self,'-RepoDir',$RepoDir,'-Mode',$Mode,'-Timeout',$Timeout)
+$childArgs = @('-ExecutionPolicy','Bypass','-File',$Self,'-RepoDir',$RepoDir,'-Branch',$Branch,'-Mode',$Mode,'-Timeout',$Timeout)
 if ($NoUpdate) { $childArgs += '-NoUpdate' }
 if ($Device)   { $childArgs += @('-Device',$Device) }
 
