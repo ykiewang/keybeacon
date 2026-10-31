@@ -99,6 +99,36 @@ verdict in `research.md §5`.
 dotnet run --project src/KeyBeacon.App -c Release
 ```
 
+## Releasing (downloadable .exe)
+
+Releases are built by GitHub Actions on a Windows runner — nothing is built or
+copied from a local machine. The [`windows-release`](../../.github/workflows/windows-release.yml)
+workflow produces a **self-contained single-file** `KeyBeacon.exe` (no .NET
+runtime install required) for both **win-x64** and **win-arm64**, zips each with
+a `.sha256`, and attaches them to the GitHub Release.
+
+It rides the same `app-v*` tag as the macOS [`release`](../../.github/workflows/release.yml)
+workflow, so one tag publishes a single Release carrying both platforms:
+
+```bash
+# cut a release (from any machine): tag a commit that contains the workflow
+git tag app-v1.1.0
+git push origin app-v1.1.0
+```
+
+Downloads land on the repo's **Releases** page as
+`KeyBeacon-win-x64-<ver>.zip` / `KeyBeacon-win-arm64-<ver>.zip`. The Windows job
+waits for the macOS job to create the Release, then uploads its assets to it
+(`--clobber`), so there is no create-race; if no macOS release appears it creates
+the Release itself.
+
+**Dry run (no Release published):** Actions tab → *windows-release* → *Run
+workflow* → optional version. The build runs and the `.exe` is attached to that
+run as a downloadable **artifact**, so you can smoke-test a build before tagging.
+
+> The tag's commit must contain `windows-release.yml`. Until it reaches `main`,
+> tag a commit on the feature branch; afterwards tag `main` as usual.
+
 ## Build constraint
 
 > This repository is developed on macOS. The Windows sources here are

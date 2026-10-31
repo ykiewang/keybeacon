@@ -122,7 +122,7 @@ jobs:
             echo
             echo "**Download:** \`BleWidget-$VER.dmg\` (or \`.zip\`); verify with \`BleWidget-$VER.sha256\`."
             echo
-            echo "_Platform: macOS available now; Windows/Linux planned for the next iteration (feature 004)._"
+            echo "_Platform: macOS and Windows (x64 + arm64) available; Linux planned for a later iteration._"
           } > "$NOTES"
           echo "path=$NOTES" >> "$GITHUB_OUTPUT"
 
