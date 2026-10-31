@@ -77,6 +77,11 @@ public sealed class TrayController : IDisposable
 
         _icon.TrayLeftMouseUp += (_, _) => ShowPanelRequested?.Invoke(this, EventArgs.Empty);
 
+        // The icon is created in code (no XAML host), so the shell never gets a
+        // Loaded event to materialise it — ForceCreate registers it explicitly.
+        // Efficiency mode stays off so background BLE monitoring isn't throttled.
+        _icon.ForceCreate(enablesEfficiencyMode: false);
+
         UpdateKeyboardsMenu();
     }
 

@@ -40,7 +40,17 @@ public sealed class AppSettings
 
     public string? SelectedKeyboardId { get; set; }
     public DisplayMode DisplayMode { get; set; } = DisplayMode.Full;
-    public PinnedCorner PinnedCorner { get; set; } = PinnedCorner.TopRight;
+
+    /// <summary>
+    /// Pinned screen corner, or <c>null</c> (default) for a free-floating panel
+    /// the user can drag anywhere. Mirrors macOS's nullable <c>pinnedCorner</c>.
+    /// </summary>
+    public PinnedCorner? PinnedCorner { get; set; }
+
+    /// <summary>Last dragged panel position, persisted only when not corner-pinned.</summary>
+    public double? PanelLeft { get; set; }
+    public double? PanelTop { get; set; }
+
     public bool VerboseLogging { get; set; }
     public UiCulturePreference UICulture { get; set; } = UiCulturePreference.System;
 

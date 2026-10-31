@@ -51,9 +51,9 @@ public partial class App : Application
             _lifecycleLog = DiagnosticsLogger.For(_logging.Factory, DiagnosticsLogger.Categories.Connection);
 
             _viewModel = new MainViewModel(_loc);
-            _panel = new FloatingPanel(_viewModel);
+            _panel = new FloatingPanel(_viewModel, _settings);
             _panel.Show();
-            _panel.Reposition(_settings.PinnedCorner);
+            _panel.ApplyPlacement();
 
             _tray = new TrayController(_loc, _settings);
             _tray.ShowPanelRequested += (_, _) => ShowPanel();
@@ -106,7 +106,11 @@ public partial class App : Application
     {
         _viewModel!.Apply(snapshot);
         _tray!.SetTitle(snapshot.KeyboardDisplayName ?? _loc.Get("AppName"));
-        _panel!.Reposition(_settings.PinnedCorner);
+
+        // Re-anchor only when corner-pinned: content growth (e.g. battery rows
+        // appearing) shifts a right/bottom-anchored panel. A free panel keeps the
+        // user's dragged position.
+        if (_settings.PinnedCorner is not null) _panel!.ApplyPlacement();
     }
 
     private void OnKeyboardSelected(string id)
