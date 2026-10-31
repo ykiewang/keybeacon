@@ -34,7 +34,7 @@ NOTES:
 
 [CmdletBinding()]
 param(
-    [ValidateSet('all','build','test','probe','diag')]
+    [ValidateSet('all','build','test','probe','diag','app')]
     [string]$Mode = 'all',
     [string]$RepoDir = (Join-Path $HOME 'kbd\keybeacon'),
     [switch]$NoUpdate,
@@ -307,9 +307,17 @@ try {
         exit 1
     }
 
+    if ($Mode -eq 'app') {
+        Say "Launching KeyBeacon client (new process)"
+        $appProj = 'app/windows/src/KeyBeacon.App/KeyBeacon.App.csproj'
+        Start-Process -FilePath 'dotnet' -ArgumentList @('run','--project',$appProj,'-c','Release','--no-build')
+        OkM "Client launched. Logs: %LOCALAPPDATA%\KeyBeacon\logs"
+        exit 0
+    }
+
     Say "Done: all steps passed."
-    if ($Mode -ne 'probe') {
-        Write-Host "Next: run '.\dev-session.ps1 -Mode probe' with the keyboard connected." -ForegroundColor Yellow
+    if ($Mode -notin @('probe','app')) {
+        Write-Host "Next: '.\run.ps1 -Mode app' to launch the client, or '-Mode probe' with the keyboard connected." -ForegroundColor Yellow
     }
     exit 0
 }

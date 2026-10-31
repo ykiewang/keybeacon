@@ -25,7 +25,7 @@ PARAMS (passed through to dev-session.ps1):
 [CmdletBinding()]
 param(
     [string]$RepoDir = 'C:\Users\adawy\Documents\kbd\keybeacon',
-    [ValidateSet('all','build','test','probe','diag')]
+    [ValidateSet('all','build','test','probe','diag','app')]
     [string]$Mode = 'all',
     [switch]$NoUpdate,
     [int]$Timeout = 10,

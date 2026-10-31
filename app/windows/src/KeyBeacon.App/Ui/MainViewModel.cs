@@ -162,16 +162,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
+        // Battery presence is decided by the AA3 characteristic existing (battery
+        // != null), not by the charging capability bits. has_left/right_charging
+        // only gate the (optional) charging icon — never the percentage readout.
+        // Mirrors macOS renderBatteryRow (FloatingPanel.swift).
         switch (battery.Shape)
         {
-            case BatteryStatus.Kind.Overall o when cap.HasLeftCharging || !cap.IsSplit:
+            case BatteryStatus.Kind.Overall o:
                 BatteryRows.Add(new LabeledValue(string.Empty, _loc.BatteryLabel(o.Reading.Percent)));
                 break;
             case BatteryStatus.Kind.Split sp:
-                if (cap.HasLeftCharging)
-                    BatteryRows.Add(new LabeledValue(_loc.Get("Battery_Left"), _loc.BatteryLabel(sp.Left.Percent)));
-                if (cap.HasRightCharging)
-                    BatteryRows.Add(new LabeledValue(_loc.Get("Battery_Right"), _loc.BatteryLabel(sp.Right.Percent)));
+                BatteryRows.Add(new LabeledValue(_loc.Get("Battery_Left"), _loc.BatteryLabel(sp.Left.Percent)));
+                BatteryRows.Add(new LabeledValue(_loc.Get("Battery_Right"), _loc.BatteryLabel(sp.Right.Percent)));
                 break;
         }
 

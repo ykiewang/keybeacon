@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using H.NotifyIcon;
 using KeyBeacon.App.Ble;
 using KeyBeacon.App.Localization;
@@ -66,11 +69,41 @@ public sealed class TrayController : IDisposable
         {
             ToolTipText = loc.Get("AppName"),
             ContextMenu = menu,
+            IconSource = BuildTrayIcon(),
             Visibility = Visibility.Visible
         };
         _icon.TrayLeftMouseUp += (_, _) => ShowPanelRequested?.Invoke(this, EventArgs.Empty);
 
         UpdateKeyboardsMenu();
+    }
+
+    /// <summary>
+    /// Renders the tray glyph at runtime (rounded dark tile + white "K"), so the
+    /// app needs no packaged .ico. Mirrors the floating panel's dark styling.
+    /// </summary>
+    private static ImageSource BuildTrayIcon()
+    {
+        const int size = 32;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var bg = new SolidColorBrush(Color.FromRgb(0x20, 0x21, 0x24));
+            dc.DrawRoundedRectangle(bg, null, new Rect(0, 0, size, size), 7, 7);
+            var text = new FormattedText(
+                "K",
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                20,
+                Brushes.White,
+                1.0);
+            dc.DrawText(text, new Point((size - text.Width) / 2, (size - text.Height) / 2));
+        }
+
+        var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(visual);
+        bmp.Freeze();
+        return bmp;
     }
 
     public event EventHandler? ShowPanelRequested;

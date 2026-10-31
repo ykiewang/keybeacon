@@ -198,10 +198,107 @@ public sealed class ProbeRunner
             Data = { ["observed_max_ms"] = observedMax, ["timeout_ms"] = (long)_options.Timeout.TotalMilliseconds }
         };
 
+        // Diagnostic (non-blocking): read AA2 (Connectivity) + AA3 (Battery) once
+        // so real-hardware capability bits and battery bytes are captured. This
+        // explains "battery not shown" issues (e.g. charging bits = 0) without a
+        // rebuild. Never affects the verdict.
+        await ProbeConnectivityAndBatteryAsync(report, ble, chars, ct);
+
         var blocking = new[] { "p1_mta", "p2_enumerate", "p3_hid_coexist", "p4_services", "p5_read_subscribe" };
         report.Verdict = blocking.All(k => report.Checks.TryGetValue(k, out var c) && c.Pass) ? "PASS" : "FAIL";
         return report;
     }
+
+    private async Task ProbeConnectivityAndBatteryAsync(
+        ProbeReport report, BleProbe ble, KbpCharacteristics? chars, CancellationToken ct)
+    {
+        var check = new CheckResult { Pass = true, Detail = "diagnostic (non-blocking): AA2/AA3 raw bytes + parse" };
+        report.Checks["p7_connectivity_battery"] = check;
+
+        var isSplit = false;
+
+        if (chars?.Connectivity is { } connChar)
+        {
+            try
+            {
+                var raw = await ble.ReadAsync(connChar, ct);
+                if (raw is null)
+                {
+                    check.Data["connectivity_read"] = "null (read failed)";
+                }
+                else
+                {
+                    check.Data["connectivity_hex"] = Convert.ToHexString(raw);
+                    check.Data["connectivity_len"] = raw.Length;
+                    var conn = ConnectivityStatus.Parse(raw);
+                    if (conn is null)
+                    {
+                        check.Data["connectivity_parse"] = "failed (length < 7?)";
+                    }
+                    else
+                    {
+                        isSplit = conn.Capability.IsSplit;
+                        check.Data["capability_byte_hex"] = raw.Length > 0 ? $"0x{raw[0]:X2}" : null;
+                        check.Data["is_split"] = conn.Capability.IsSplit;
+                        check.Data["has_host_connection"] = conn.Capability.HasHostConnection;
+                        check.Data["has_profile"] = conn.Capability.HasProfile;
+                        check.Data["has_split_link"] = conn.Capability.HasSplitLink;
+                        check.Data["has_output_endpoint"] = conn.Capability.HasOutputEndpoint;
+                        check.Data["has_left_charging"] = conn.Capability.HasLeftCharging;
+                        check.Data["has_right_charging"] = conn.Capability.HasRightCharging;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                check.Data["connectivity_error"] = ex.Message;
+            }
+        }
+        else
+        {
+            check.Data["connectivity"] = "AA2 absent";
+        }
+
+        if (chars?.Battery is { } batChar)
+        {
+            try
+            {
+                var raw = await ble.ReadAsync(batChar, ct);
+                if (raw is null)
+                {
+                    check.Data["battery_read"] = "null (read failed)";
+                }
+                else
+                {
+                    check.Data["battery_hex"] = Convert.ToHexString(raw);
+                    check.Data["battery_len"] = raw.Length;
+                    check.Data["battery_parsed_with_is_split"] = isSplit;
+                    var bat = BatteryStatus.Parse(raw, isSplit);
+                    check.Data["battery_parsed"] = bat is null
+                        ? $"failed (len={raw.Length}, isSplit={isSplit})"
+                        : DescribeBattery(bat);
+                }
+            }
+            catch (Exception ex)
+            {
+                check.Data["battery_error"] = ex.Message;
+            }
+        }
+        else
+        {
+            check.Data["battery"] = "AA3 absent";
+        }
+    }
+
+    private static string DescribeBattery(BatteryStatus b) => b.Shape switch
+    {
+        BatteryStatus.Kind.Overall o => $"overall={FormatReading(o.Reading)}",
+        BatteryStatus.Kind.Split s => $"left={FormatReading(s.Left)} right={FormatReading(s.Right)}",
+        _ => "unknown"
+    };
+
+    private static string FormatReading(BatteryStatus.BatteryReading r) =>
+        r.Percent is { } p ? $"{p}%" : (r.OutOfRange ? $"out-of-range(0x{r.RawByte:X2})" : "unavailable");
 
     private static string FormatMods(KeyboardStatus status)
     {
