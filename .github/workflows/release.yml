@@ -271,13 +271,15 @@ jobs:
           set -euo pipefail
           VER="${{ needs.meta.outputs.version }}"
           TAG="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
           PRE=""
           case "$VER" in *-*) PRE="--prerelease";; esac
-          # Single creator — no race. Create, or (on re-run) update notes + clobber assets.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "KeyBeacon $VER" --notes-file notes.md $PRE
-            gh release upload "$TAG" --clobber dist/*
+          # Single creator — no race. This job doesn't checkout the repo, so pass
+          # --repo explicitly (gh otherwise needs a local git remote).
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$REPO" --title "KeyBeacon $VER" --notes-file notes.md $PRE
+            gh release upload "$TAG" --repo "$REPO" --clobber dist/*
           else
-            gh release create "$TAG" --title "KeyBeacon $VER" --notes-file notes.md $PRE dist/*
+            gh release create "$TAG" --repo "$REPO" --title "KeyBeacon $VER" --notes-file notes.md $PRE dist/*
           fi
           echo "published release $TAG"
