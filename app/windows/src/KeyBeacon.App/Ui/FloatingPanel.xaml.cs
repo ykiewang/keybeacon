@@ -21,6 +21,26 @@ public partial class FloatingPanel : Window
         DataContext = viewModel;
         _settings = settings;
         Loaded += (_, _) => ApplyPlacement();
+        // SizeToContent means switching display mode (or rows appearing) resizes
+        // the window one layout pass later, after any synchronous ApplyPlacement
+        // has already run against the old size. Re-anchor on the actual size
+        // change so a corner-pinned panel stays glued to its corner instead of
+        // growing off-screen, and a free panel stays inside the work area.
+        // Mirrors macOS reflowFrameToContent()'s tail.
+        SizeChanged += (_, _) => ReanchorAfterResize();
+    }
+
+    private void ReanchorAfterResize()
+    {
+        if (_settings.PinnedCorner is { } corner)
+        {
+            SnapToCorner(corner);
+            return;
+        }
+
+        var area = SystemParameters.WorkArea;
+        Left = Clamp(Left, area.Left, area.Right - ActualWidth);
+        Top = Clamp(Top, area.Top, area.Bottom - ActualHeight);
     }
 
     /// <summary>

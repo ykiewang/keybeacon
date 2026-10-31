@@ -88,10 +88,65 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </StackPanel>
-        <TextBlock Text="{Binding CompactSummary}"
-                   Foreground="White" FontSize="13" FontWeight="SemiBold"
-                   VerticalAlignment="Center" HorizontalAlignment="Center"
-                   Visibility="{Binding ShowCompact, Converter={StaticResource BoolToVisibility}}" />
+
+        <!-- Compact single-row (mirrors macOS FloatingPanel.compactRow):
+             layer + modifier glyphs | host-dot Pn | L/R battery | endpoint -->
+        <StackPanel Orientation="Horizontal" MinWidth="120"
+                    VerticalAlignment="Center" HorizontalAlignment="Center"
+                    Visibility="{Binding ShowCompact, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding CompactLayer}" Foreground="White"
+                       FontFamily="Consolas" FontSize="14" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+
+            <!-- Modifier glyphs: always shown, active=white / idle=dim (macOS) -->
+            <TextBlock Text="&#x21E7;" FontFamily="Segoe UI Symbol" FontSize="14" Margin="1,0" VerticalAlignment="Center"
+                       Foreground="{Binding Shift, Converter={StaticResource ActiveToText}}" />
+            <TextBlock Text="&#x2303;" FontFamily="Segoe UI Symbol" FontSize="14" Margin="1,0" VerticalAlignment="Center"
+                       Foreground="{Binding Control, Converter={StaticResource ActiveToText}}" />
+            <TextBlock Text="&#x2325;" FontFamily="Segoe UI Symbol" FontSize="14" Margin="1,0" VerticalAlignment="Center"
+                       Foreground="{Binding Alt, Converter={StaticResource ActiveToText}}" />
+            <TextBlock Text="&#x2318;" FontFamily="Segoe UI Symbol" FontSize="14" Margin="1,0" VerticalAlignment="Center"
+                       Foreground="{Binding Gui, Converter={StaticResource ActiveToText}}" />
+
+            <!-- Host segment: | dot Pn -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                        Visibility="{Binding ShowCompactHost, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="&#x2502;" Foreground="#59FFFFFF" FontSize="13" Margin="8,0" VerticalAlignment="Center" />
+                <Ellipse Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"
+                         Fill="{Binding CompactHostDot}"
+                         Visibility="{Binding CompactHostDotVisible, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding CompactProfileText}" Foreground="White"
+                           FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"
+                           Visibility="{Binding CompactProfileVisible, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+
+            <!-- Split / battery segment: | dot L85 dot R72 -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                        Visibility="{Binding ShowCompactSplit, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="&#x2502;" Foreground="#59FFFFFF" FontSize="13" Margin="8,0" VerticalAlignment="Center" />
+                <Ellipse Width="8" Height="8" Margin="0,0,3,0" VerticalAlignment="Center" Fill="{Binding CompactLeftDot}" />
+                <TextBlock Text="{Binding CompactLeftBattery}" Foreground="White"
+                           FontFamily="Consolas" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="&#x26A1;" Foreground="#FFCC00" FontSize="11" Margin="2,0,0,0" VerticalAlignment="Center"
+                           Visibility="{Binding CompactLeftCharging, Converter={StaticResource BoolToVisibility}}" />
+                <StackPanel Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center"
+                            Visibility="{Binding CompactRightVisible, Converter={StaticResource BoolToVisibility}}">
+                    <Ellipse Width="8" Height="8" Margin="0,0,3,0" VerticalAlignment="Center" Fill="{Binding CompactRightDot}" />
+                    <TextBlock Text="{Binding CompactRightBattery}" Foreground="White"
+                               FontFamily="Consolas" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="&#x26A1;" Foreground="#FFCC00" FontSize="11" Margin="2,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding CompactRightCharging, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Output-endpoint segment: | USB -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                        Visibility="{Binding ShowCompactEndpoint, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="&#x2502;" Foreground="#59FFFFFF" FontSize="13" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding CompactEndpointText}" Foreground="White"
+                           FontFamily="Consolas" FontSize="12" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
         </Grid>
     </Border>
 </Window>

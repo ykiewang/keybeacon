@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using H.NotifyIcon;
 using KeyBeacon.App.Ble;
 using KeyBeacon.App.Localization;
@@ -91,8 +92,15 @@ public sealed class TrayController : IDisposable
 
         // A failure here (icon rendering / native HICON conversion) must never
         // take down the whole app — the tray menu still works without a glyph.
-        try { _icon.IconSource = BuildTrayIcon(); }
-        catch { /* fall back to the default/empty glyph */ }
+        // Primary: the pre-rendered, pixel-centred .ico resource (URI-backed, so
+        // H.NotifyIcon's ImageSource→HICON path works). Fallback: the runtime
+        // GDI+ glyph, which is less precisely centred but never throws.
+        try { _icon.IconSource = LoadTrayIcon(); }
+        catch
+        {
+            try { _icon.IconSource = BuildTrayIcon(); }
+            catch { /* fall back to the default/empty glyph */ }
+        }
 
         // Left-click toggles the panel (Windows-conventional primary action);
         // right-click opens the menu automatically.
@@ -153,11 +161,23 @@ public sealed class TrayController : IDisposable
         new() { Header = header, IsCheckable = true };
 
     /// <summary>
-    /// Renders the tray glyph (rounded dark tile + white "K") as a
+    /// Loads the pre-rendered tray glyph (rounded dark tile + optically-centred
+    /// white "K") from the embedded <c>Assets/trayicon.ico</c> resource. A
+    /// <see cref="BitmapImage"/> keeps its <c>UriSource</c>, which is the only
+    /// shape H.NotifyIcon 2.1.4 can turn into a native HICON (it resolves the
+    /// pack URI via <c>Application.GetResourceStream</c>); a runtime in-memory
+    /// bitmap would throw, so this path is deliberately URI-backed.
+    /// </summary>
+    private static ImageSource LoadTrayIcon() => new BitmapImage(
+        new Uri("pack://application:,,,/Assets/trayicon.ico", UriKind.Absolute));
+
+    /// <summary>
+    /// Fallback tray glyph rendered at runtime as a
     /// <see cref="GeneratedIconSource"/>. H.NotifyIcon's <c>ToIconAsync</c>
     /// special-cases this type and rasterises it with its own GDI+ generator,
     /// so it bypasses the WPF ImageSource→Uri conversion that cannot handle a
-    /// runtime-generated <c>RenderTargetBitmap</c>/<c>BitmapFrame</c>.
+    /// runtime-generated <c>RenderTargetBitmap</c>/<c>BitmapFrame</c>. Used only
+    /// when the embedded <c>.ico</c> fails to load.
     /// </summary>
     private static ImageSource BuildTrayIcon() => new GeneratedIconSource
     {

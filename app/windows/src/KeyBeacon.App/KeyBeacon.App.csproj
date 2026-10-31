@@ -19,6 +19,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\trayicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\KeyBeacon.Core\KeyBeacon.Core.csproj" />
   </ItemGroup>
 
