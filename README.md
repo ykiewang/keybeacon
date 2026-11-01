@@ -37,11 +37,20 @@ This repository is the **home of three things**:
 | Directory | What |
 |-----------|------|
 | [`app/macos/`](app/macos/) | The macOS app (menu-bar widget + floating status panel). |
+| [`app/windows/`](app/windows/) | The Windows app (system tray + floating status panel). |
 | [`protocol/`](protocol/) | The authoritative, versioned **KeyBeacon Protocol** standard (KBP). |
 | [`conformance/`](conformance/) | The **conformance kit** — guide + checklist + self-test tool for keyboard authors. |
 
-> **Platform status**: macOS is available now. **Windows and Linux are planned for the next
-> iteration** (they are not yet available). The protocol is OS-neutral by design.
+> **Platform status**: macOS and Windows are available now. **Linux is planned for the next
+> iteration.** The protocol is OS-neutral by design.
+
+## Interface language
+
+Both apps are bilingual — **中文** and **English**. Pick **Follow System / English / 中文** from the
+app menu (macOS menu bar / Windows tray). The whole UI switches immediately with no restart, and the
+choice is remembered across launches. "Follow System" tracks the OS locale: `zh-*` → 中文, everything
+else → English. Protocol data (layer names, keyboard device names) is shown verbatim and is never
+translated.
 
 ## Roadmap
 
@@ -100,6 +109,20 @@ spec time. These are candidates, not commitments.
 | RGB / backlight state | confirm effect, brightness, on/off after a blind toggle | Medium — underglow / backlight getters + events | KBP 1.x · characteristic |
 | Link quality (RSSI) | signal strength of the host or split link | Low — needs HCI; not exposed by default | later |
 | Uptime | time since last reset (diagnostics) | High but low value — `k_uptime` | KBP 1.x · field |
+
+## Download & run (Windows)
+
+1. Go to the [Releases](https://github.com/ykiewang/keybeacon/releases) page and download
+   `KeyBeacon-win-x64-<version>.zip` (or `-win-arm64-` for ARM64 machines). Verify it against the
+   matching `.sha256` file if you like.
+2. Unzip and run `KeyBeacon.exe`. The build is **self-contained** — no .NET runtime install needed.
+3. **First run:** the build is unsigned, so Windows SmartScreen warns. Click **More info** →
+   **Run anyway**. If the download was marked blocked: right-click `KeyBeacon.exe` →
+   **Properties** → tick **Unblock** → **OK**.
+4. The app lives in the **system tray** (no taskbar window) — look for the **K** icon, possibly under
+   the `^` overflow arrow. Left-click toggles the floating panel; right-click opens the menu.
+
+Requires Windows 10 (build 19041 / 2004) or Windows 11.
 
 ## Download & run (macOS)
 
@@ -210,11 +233,17 @@ Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操�
 | 目录 | 内容 |
 |------|------|
 | [`app/macos/`](app/macos/) | macOS 应用(菜单栏小组件 + 悬浮状态面板)。 |
+| [`app/windows/`](app/windows/) | Windows 应用(系统托盘 + 悬浮状态面板)。 |
 | [`protocol/`](protocol/) | 权威、带版本的 **KeyBeacon 协议** 标准(KBP)。 |
 | [`conformance/`](conformance/) | **一致性套件** —— 面向键盘作者的指南 + 清单 + 自测工具。 |
 
-> **平台状态**:macOS 现已可用。**Windows 与 Linux 顺延至下一期**(暂不可用)。协议在设计上与
-> 操作系统无关。
+> **平台状态**:macOS 与 Windows 现已可用。**Linux 顺延至下一期**。协议在设计上与操作系统无关。
+
+## 界面语言
+
+两个客户端均支持双语 —— **中文**与 **English**。在应用菜单(macOS 菜单栏 / Windows 托盘)中选择
+「跟随系统 / English / 中文」,整个界面即时切换,无需重启,选择会在重启后保留。「跟随系统」模式跟随
+操作系统区域:`zh-*` → 中文,其余 → 英文。协议数据(层名、键盘设备名)原文显示,不做翻译。
 
 ## 路线图
 
@@ -264,6 +293,18 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 | RGB / 背光状态 | 盲切后确认效果、亮度、开关 | 中——underglow / backlight getter + 事件 | KBP 1.x · 特征 |
 | 连接质量(RSSI) | 主机或分体链路信号强弱 | 低——需 HCI,默认不暴露 | 后期 |
 | 运行时长 | 距上次复位的时间(诊断) | 高但价值低——`k_uptime` | KBP 1.x · 字段 |
+
+## 下载即用(Windows)
+
+1. 打开 [Releases](https://github.com/ykiewang/keybeacon/releases) 页面,下载
+   `KeyBeacon-win-x64-<版本>.zip`(ARM64 机器选 `-win-arm64-`)。可用同名 `.sha256` 文件校验。
+2. 解压后运行 `KeyBeacon.exe`。该构建为**自包含单文件**,**无需安装 .NET 运行时**。
+3. **首次运行**:当前构建未签名,Windows SmartScreen 会告警。点击**更多信息** → **仍要运行**。
+   若下载被标记为已阻止:右键 `KeyBeacon.exe` → **属性** → 勾选**解除锁定** → **确定**。
+4. 应用常驻**系统托盘**(无任务栏窗口)—— 找 **K** 图标,可能收在 `^` 溢出箭头里。
+   左键切换浮窗,右键打开菜单。
+
+需要 Windows 10(build 19041 / 2004)或 Windows 11。
 
 ## 下载即用(macOS)
 

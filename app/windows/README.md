@@ -6,6 +6,26 @@ keyboard's current layer, modifiers, and — for KBP 1.1 — connectivity and
 battery.
 
 Spec: [`specs/003-windows-desktop-client`](../../specs/003-windows-desktop-client).
+Interface language: [`specs/004-bilingual-ui-language`](../../specs/004-bilingual-ui-language).
+
+## Language
+
+Bilingual UI — **中文** / **English**. The tray's **Language** submenu
+(`Language / 语言`) offers three radio options:
+
+| Option | Behaviour |
+|--------|-----------|
+| Follow System | `zh-*` OS locale → 中文, everything else → English |
+| English | forced English |
+| 中文 | forced Simplified Chinese |
+
+Switching is immediate (no restart): the floating panel re-renders from the
+cached snapshot and the tray menu is relabelled **in place** — the tray icon is
+deliberately *not* recreated, because two `TaskbarIcon` instances share one
+shell id and disposing the old one would remove the new icon's glyph. The
+choice persists in `%LOCALAPPDATA%\KeyBeacon\settings.json` (`UICulture`) and is
+restored on the next launch. Protocol fields (layer names, device names) are
+shown verbatim and never translated.
 
 ## Layout
 
@@ -29,7 +49,12 @@ Bluetooth hardware. Only the BLE/UI layer needs Windows.
 
 The repo ships `app/windows/dev-session.ps1` — a single entry point that
 updates the repo, builds, runs Core tests, and on any failure collects a
-diagnostic bundle to the desktop.
+diagnostic bundle to the desktop. `run.ps1` is a thin wrapper that re-fetches
+the latest `dev-session.ps1` each time, and `verify-app.ps1` is a one-shot
+"just make it run" launcher (build → launch → report whether it survived).
+
+All three take `-Branch <name>` so you can build and run any branch — the
+default is `feat/windows-ble-probe`.
 
 ### First time
 
@@ -48,7 +73,7 @@ Then fetch the script and run it:
 
 ```powershell
 # download the script (proxy must already be configured if needed)
-irm https://raw.githubusercontent.com/ykiewang/keybeacon/feat/windows-ble-probe/app/windows/dev-session.ps1 -OutFile dev-session.ps1
+irm https://raw.githubusercontent.com/ykiewang/keybeacon/main/app/windows/dev-session.ps1 -OutFile dev-session.ps1
 powershell -ExecutionPolicy Bypass -File .\dev-session.ps1
 ```
 
@@ -66,6 +91,12 @@ powershell -ExecutionPolicy Bypass -File .\dev-session.ps1 -Mode probe
 
 # collect diagnostics only (no build)
 powershell -ExecutionPolicy Bypass -File .\dev-session.ps1 -Mode diag
+
+# build + launch, then report whether the client stayed alive
+powershell -ExecutionPolicy Bypass -File .\verify-app.ps1
+
+# any of the above against a different branch
+powershell -ExecutionPolicy Bypass -File .\verify-app.ps1 -Branch feat/my-feature
 ```
 
 On any failure the script writes `keybeacon-diag-<timestamp>.zip` to the
@@ -101,33 +132,28 @@ dotnet run --project src/KeyBeacon.App -c Release
 
 ## Releasing (downloadable .exe)
 
-Releases are built by GitHub Actions on a Windows runner — nothing is built or
-copied from a local machine. The [`windows-release`](../../.github/workflows/windows-release.yml)
-workflow produces a **self-contained single-file** `KeyBeacon.exe` (no .NET
-runtime install required) for both **win-x64** and **win-arm64**, zips each with
-a `.sha256`, and attaches them to the GitHub Release.
-
-It rides the same `app-v*` tag as the macOS [`release`](../../.github/workflows/release.yml)
-workflow, so one tag publishes a single Release carrying both platforms:
+Releases are built by GitHub Actions — nothing is built or copied from a local
+machine. The unified [`release`](../../.github/workflows/release.yml) workflow
+covers **both platforms on one `app-v*` tag**: its Windows job produces a
+**self-contained single-file** `KeyBeacon.exe` (no .NET runtime install
+required) for both **win-x64** and **win-arm64**, zips each with a `.sha256`,
+and the `publish` job attaches everything (macOS + Windows) to a single GitHub
+Release.
 
 ```bash
-# cut a release (from any machine): tag a commit that contains the workflow
-git tag app-v1.1.0
-git push origin app-v1.1.0
+# cut a release (from any machine) — publishes macOS + Windows together
+git tag app-v0.4.0
+git push origin app-v0.4.0
 ```
 
 Downloads land on the repo's **Releases** page as
-`KeyBeacon-win-x64-<ver>.zip` / `KeyBeacon-win-arm64-<ver>.zip`. The Windows job
-waits for the macOS job to create the Release, then uploads its assets to it
-(`--clobber`), so there is no create-race; if no macOS release appears it creates
-the Release itself.
+`KeyBeacon-win-x64-<ver>.zip` / `KeyBeacon-win-arm64-<ver>.zip` (each with a
+`.sha256`). Because one `publish` job creates the Release after both platform
+jobs finish, there is no cross-workflow create-race.
 
-**Dry run (no Release published):** Actions tab → *windows-release* → *Run
-workflow* → optional version. The build runs and the `.exe` is attached to that
-run as a downloadable **artifact**, so you can smoke-test a build before tagging.
-
-> The tag's commit must contain `windows-release.yml`. Until it reaches `main`,
-> tag a commit on the feature branch; afterwards tag `main` as usual.
+**Dry run (no Release published):** Actions tab → *release* → *Run workflow* →
+optional version. Both platforms build and their artifacts attach to that run,
+so you can smoke-test a build before tagging.
 
 ## Build constraint
 
