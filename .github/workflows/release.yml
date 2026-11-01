@@ -57,7 +57,7 @@ jobs:
 
   macos:
     needs: meta
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}

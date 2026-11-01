@@ -18,7 +18,7 @@ namespace KeyBeacon.App.Ui;
 /// </summary>
 public sealed class MainViewModel : INotifyPropertyChanged
 {
-    private readonly LocalizationService _loc;
+    private LocalizationService _loc;
 
     public MainViewModel(LocalizationService loc)
     {
@@ -26,6 +26,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ConnectivityRows = new ObservableCollection<LabeledValue>();
         BatteryRows = new ObservableCollection<LabeledValue>();
         Apply(KeyboardSnapshot.ForState(MonitorState.NoKeyboard));
+    }
+
+    /// <summary>
+    /// Swap the localisation service after a language change (FR-003). Callers
+    /// re-<see cref="Apply"/> the current snapshot so every bound label refreshes
+    /// in the new language without a restart.
+    /// </summary>
+    public void SetLocalization(LocalizationService loc)
+    {
+        _loc = loc;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -51,6 +51,18 @@
   <data name="Menu_Quit" xml:space="preserve">
     <value>Quit</value>
   </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Menu_LanguageSystem" xml:space="preserve">
+    <value>Follow System</value>
+  </data>
+  <data name="Menu_LanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Menu_LanguageChinese" xml:space="preserve">
+    <value>中文</value>
+  </data>
   <data name="Menu_ShowPanel" xml:space="preserve">
     <value>Show Floating Panel</value>
   </data>
@@ -192,5 +204,11 @@
   </data>
   <data name="Dialog_OSUnsupported" xml:space="preserve">
     <value>KeyBeacon requires Windows 10 version 2004 (build 19041) or later.</value>
+  </data>
+  <data name="Dialog_Ok" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Dialog_Cancel" xml:space="preserve">
+    <value>Cancel</value>
   </data>
 </root>

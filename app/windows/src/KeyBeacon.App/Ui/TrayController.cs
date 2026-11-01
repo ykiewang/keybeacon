@@ -21,16 +21,17 @@ namespace KeyBeacon.App.Ui;
 public sealed class TrayController : IDisposable
 {
     private readonly TaskbarIcon _icon;
-    private readonly LocalizationService _loc;
+    private LocalizationService _loc;
     private readonly AppSettings _settings;
-    private readonly MenuItem _keyboardsRoot;
-    private readonly MenuItem _verboseItem;
-    private readonly MenuItem _showPanelItem;
+    private MenuItem _keyboardsRoot = null!;
+    private MenuItem _verboseItem = null!;
+    private MenuItem _showPanelItem = null!;
 
     // Radio groups. Pins use a list because a Dictionary cannot key on a null
     // (nullable-enum) value — null is the "off / remember position" entry.
     private readonly List<(PinnedCorner? Corner, MenuItem Item)> _pinItems = new();
     private readonly Dictionary<DisplayMode, MenuItem> _modeItems = new();
+    private readonly Dictionary<UiCulturePreference, MenuItem> _languageItems = new();
 
     private IReadOnlyList<CompatibleKeyboard> _keyboards = Array.Empty<CompatibleKeyboard>();
 
@@ -39,54 +40,10 @@ public sealed class TrayController : IDisposable
         _loc = loc;
         _settings = settings;
 
-        _keyboardsRoot = new MenuItem { Header = loc.Get("Menu_Keyboard") };
-
-        _showPanelItem = new MenuItem
-        {
-            Header = loc.Get("Menu_ShowPanel"),
-            IsCheckable = true,
-            IsChecked = settings.PanelVisible
-        };
-        _showPanelItem.Click += (_, _) => TogglePanelRequested?.Invoke(this, EventArgs.Empty);
-
-        var reconnect = new MenuItem { Header = loc.Get("Menu_Reconnect") };
-        reconnect.Click += (_, _) => ReconnectRequested?.Invoke(this, EventArgs.Empty);
-
-        var pinRoot = BuildPinMenu();
-        var modeRoot = BuildModeMenu();
-
-        _verboseItem = new MenuItem
-        {
-            Header = loc.Get("Menu_VerboseLogging"),
-            IsCheckable = true,
-            IsChecked = settings.VerboseLogging
-        };
-        _verboseItem.Click += (_, _) => VerboseLoggingToggled?.Invoke(this, _verboseItem.IsChecked);
-
-        var export = new MenuItem { Header = loc.Get("Menu_ExportDiagnostics") };
-        export.Click += (_, _) => ExportDiagnosticsRequested?.Invoke(this, EventArgs.Empty);
-
-        var quit = new MenuItem { Header = loc.Get("Menu_Quit") };
-        quit.Click += (_, _) => QuitRequested?.Invoke(this, EventArgs.Empty);
-
-        var menu = new ContextMenu();
-        menu.Items.Add(_keyboardsRoot);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(_showPanelItem);
-        menu.Items.Add(reconnect);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(pinRoot);
-        menu.Items.Add(modeRoot);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(_verboseItem);
-        menu.Items.Add(export);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(quit);
-
         _icon = new TaskbarIcon
         {
             ToolTipText = loc.Get("AppName"),
-            ContextMenu = menu,
+            ContextMenu = BuildMenu(),
             Visibility = Visibility.Visible
         };
 
@@ -113,6 +70,84 @@ public sealed class TrayController : IDisposable
 
         SetPinnedCorner(settings.PinnedCorner);
         SetDisplayMode(settings.DisplayMode);
+        UpdateKeyboardsMenu();
+    }
+
+    /// <summary>
+    /// Builds (or rebuilds) the right-click menu from the current
+    /// <see cref="_loc"/>. The checkable-group backing collections are cleared
+    /// first so a rebuild after a language change does not accumulate stale
+    /// menu items.
+    /// </summary>
+    private ContextMenu BuildMenu()
+    {
+        _pinItems.Clear();
+        _modeItems.Clear();
+        _languageItems.Clear();
+
+        _keyboardsRoot = new MenuItem { Header = _loc.Get("Menu_Keyboard") };
+
+        _showPanelItem = new MenuItem
+        {
+            Header = _loc.Get("Menu_ShowPanel"),
+            IsCheckable = true,
+            IsChecked = _settings.PanelVisible
+        };
+        _showPanelItem.Click += (_, _) => TogglePanelRequested?.Invoke(this, EventArgs.Empty);
+
+        var reconnect = new MenuItem { Header = _loc.Get("Menu_Reconnect") };
+        reconnect.Click += (_, _) => ReconnectRequested?.Invoke(this, EventArgs.Empty);
+
+        var pinRoot = BuildPinMenu();
+        var modeRoot = BuildModeMenu();
+        var languageRoot = BuildLanguageMenu();
+
+        _verboseItem = new MenuItem
+        {
+            Header = _loc.Get("Menu_VerboseLogging"),
+            IsCheckable = true,
+            IsChecked = _settings.VerboseLogging
+        };
+        _verboseItem.Click += (_, _) => VerboseLoggingToggled?.Invoke(this, _verboseItem.IsChecked);
+
+        var export = new MenuItem { Header = _loc.Get("Menu_ExportDiagnostics") };
+        export.Click += (_, _) => ExportDiagnosticsRequested?.Invoke(this, EventArgs.Empty);
+
+        var quit = new MenuItem { Header = _loc.Get("Menu_Quit") };
+        quit.Click += (_, _) => QuitRequested?.Invoke(this, EventArgs.Empty);
+
+        var menu = new ContextMenu();
+        menu.Items.Add(_keyboardsRoot);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(_showPanelItem);
+        menu.Items.Add(reconnect);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(pinRoot);
+        menu.Items.Add(modeRoot);
+        menu.Items.Add(languageRoot);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(_verboseItem);
+        menu.Items.Add(export);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(quit);
+        return menu;
+    }
+
+    /// <summary>
+    /// Re-applies the menu labels after a UI-language change WITHOUT recreating
+    /// the <see cref="TaskbarIcon"/>. Rebuilding the icon is unsafe: two
+    /// TaskbarIcon instances share one shell notification id, so disposing the
+    /// old one issues NIM_DELETE for that id and removes the freshly-created
+    /// icon's glyph (the icon vanishes from the tray). Only the ContextMenu is
+    /// swapped; the icon registration and tooltip are left untouched.
+    /// </summary>
+    public void ApplyLocalization(LocalizationService loc)
+    {
+        _loc = loc;
+        _icon.ContextMenu = BuildMenu();
+        SetPinnedCorner(_settings.PinnedCorner);
+        SetDisplayMode(_settings.DisplayMode);
+        SetLanguage(_settings.UICulture);
         UpdateKeyboardsMenu();
     }
 
@@ -157,6 +192,28 @@ public sealed class TrayController : IDisposable
         return root;
     }
 
+    private MenuItem BuildLanguageMenu()
+    {
+        var root = new MenuItem { Header = _loc.Get("Menu_Language") };
+
+        // Order: follow-system, English, 中文 — concrete languages self-named so
+        // a user can always find their own (mirrors macOS), with the current
+        // preference shown checked (FR-012).
+        AddLanguageItem(root, UiCulturePreference.System, "Menu_LanguageSystem");
+        AddLanguageItem(root, UiCulturePreference.English, "Menu_LanguageEnglish");
+        AddLanguageItem(root, UiCulturePreference.Chinese, "Menu_LanguageChinese");
+        return root;
+    }
+
+    private void AddLanguageItem(MenuItem root, UiCulturePreference preference, string labelKey)
+    {
+        var item = NewCheckItem(_loc.Get(labelKey));
+        item.IsChecked = _settings.UICulture == preference;
+        item.Click += (_, _) => LanguageSelected?.Invoke(this, preference);
+        _languageItems[preference] = item;
+        root.Items.Add(item);
+    }
+
     private static MenuItem NewCheckItem(string header) =>
         new() { Header = header, IsCheckable = true };
 
@@ -199,6 +256,7 @@ public sealed class TrayController : IDisposable
     public event EventHandler<bool>? VerboseLoggingToggled;
     public event EventHandler<PinnedCorner?>? PinCornerSelected;
     public event EventHandler<DisplayMode>? DisplayModeSelected;
+    public event EventHandler<UiCulturePreference>? LanguageSelected;
 
     public void SetTitle(string title) => _icon.ToolTipText = title;
 
@@ -212,6 +270,11 @@ public sealed class TrayController : IDisposable
     public void SetDisplayMode(DisplayMode mode)
     {
         foreach (var pair in _modeItems) pair.Value.IsChecked = pair.Key == mode;
+    }
+
+    public void SetLanguage(UiCulturePreference preference)
+    {
+        foreach (var pair in _languageItems) pair.Value.IsChecked = pair.Key == preference;
     }
 
     public void UpdateKeyboards(IReadOnlyList<CompatibleKeyboard> keyboards)

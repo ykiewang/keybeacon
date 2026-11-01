@@ -34,9 +34,9 @@ public sealed class ExportReviewWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
 
-        var ok = new Button { Content = "OK", Width = 88, IsDefault = true, Margin = new Thickness(0, 0, 8, 0) };
+        var ok = new Button { Content = loc.Get("Dialog_Ok"), Width = 88, IsDefault = true, Margin = new Thickness(0, 0, 8, 0) };
         ok.Click += (_, _) => { DialogResult = true; };
-        var cancel = new Button { Content = "Cancel", Width = 88, IsCancel = true };
+        var cancel = new Button { Content = loc.Get("Dialog_Cancel"), Width = 88, IsCancel = true };
 
         var buttons = new StackPanel
         {

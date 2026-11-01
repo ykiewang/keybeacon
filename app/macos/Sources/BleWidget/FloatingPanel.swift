@@ -30,7 +30,7 @@ final class FloatingPanel: NSPanel {
         v.translatesAutoresizingMaskIntoConstraints = false
         return v
     }()
-    private let connectivityCardTitle = NSTextField(labelWithString: "连接与电量")
+    private let connectivityCardTitle = NSTextField(labelWithString: L10n.text("Card_Connectivity"))
 
     private let hostDot: NSView = {
         let v = NSView()
@@ -43,20 +43,20 @@ final class FloatingPanel: NSPanel {
     private let hostStaleLabel = NSTextField(labelWithString: "")
     private let hostRow = NSStackView()
 
-    private let profileCaption = NSTextField(labelWithString: "Profile")
+    private let profileCaption = NSTextField(labelWithString: L10n.text("Card_Profile"))
     private let profileSlotStack = NSStackView()
     private let profileStaleLabel = NSTextField(labelWithString: "")
     private let profileRow = NSStackView()
     private var profileBadges: [ProfileBadgeView] = []
 
     private let splitLeftDot = FloatingPanel.makeDot(diameter: 9)
-    private let splitLeftLabel = NSTextField(labelWithString: "左 —")
+    private let splitLeftLabel = NSTextField(labelWithString: L10n.text("Split_LeftDash"))
     private let splitRightDot = FloatingPanel.makeDot(diameter: 9)
-    private let splitRightLabel = NSTextField(labelWithString: "右 —")
+    private let splitRightLabel = NSTextField(labelWithString: L10n.text("Split_RightDash"))
     private let splitStaleLabel = NSTextField(labelWithString: "")
     private let splitRow = NSStackView()
 
-    private let batteryCaption = NSTextField(labelWithString: "电量")
+    private let batteryCaption = NSTextField(labelWithString: L10n.text("Battery_Caption"))
     private let batteryBarsStack = NSStackView()
     private let batteryStaleLabel = NSTextField(labelWithString: "")
     private let batteryRow = NSStackView()
@@ -71,7 +71,7 @@ final class FloatingPanel: NSPanel {
     private var cachedOverallReading: BatteryStatus.BatteryReading?
     private var cachedOverallReadingAt: TimeInterval?
 
-    private let endpointLabel = NSTextField(labelWithString: "输出:—")
+    private let endpointLabel = NSTextField(labelWithString: "")
     private let endpointStaleLabel = NSTextField(labelWithString: "")
     private let endpointRow = NSStackView()
 
@@ -113,6 +113,7 @@ final class FloatingPanel: NSPanel {
     private let staleness = StalenessTracker()
     private var stalenessTimer: Timer?
     private var cachedConnectivity: ConnectivityStatus?
+    private var cachedStatus: KeyboardStatus?
 
     /// Outer vertical stack that holds `topRow`, `connectivityCard` and
     /// `compactRow` (whichever are currently visible per `displayMode`).
@@ -491,8 +492,8 @@ final class FloatingPanel: NSPanel {
         for icon in [compactChargingLeftIcon, compactChargingRightIcon] {
             icon.font = .systemFont(ofSize: 10, weight: .bold)
             icon.textColor = .systemYellow
-            icon.toolTip = "充电中"
-            icon.setAccessibilityLabel("充电中")
+            icon.toolTip = L10n.text("Conn_Charging")
+            icon.setAccessibilityLabel(L10n.text("Conn_Charging"))
             icon.isHidden = true
             icon.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -612,7 +613,28 @@ final class FloatingPanel: NSPanel {
         reflowFrameToContent()
     }
 
-    // MARK: - KBP 1.1 connectivity row updates (T023, T024)
+    // MARK: - Language switch (FR-003 / FR-011)
+
+    /// Re-apply every static caption in the current ``L10n/currentLanguage`` and
+    /// re-render the cached live state, so a language switch updates the whole
+    /// panel immediately without a restart. Callers set `L10n.currentLanguage`
+    /// first, then call this.
+    func applyLanguage() {
+        connectivityCardTitle.stringValue = L10n.text("Card_Connectivity")
+        profileCaption.stringValue = L10n.text("Card_Profile")
+        splitLeftLabel.stringValue = L10n.text("Split_LeftDash")
+        splitRightLabel.stringValue = L10n.text("Split_RightDash")
+        batteryCaption.stringValue = L10n.text("Battery_Caption")
+        for icon in [compactChargingLeftIcon, compactChargingRightIcon] {
+            icon.toolTip = L10n.text("Conn_Charging")
+            icon.setAccessibilityLabel(L10n.text("Conn_Charging"))
+        }
+        if let status = cachedStatus {
+            update(status)
+        }
+        renderConnectivity()
+        reflowFrameToContent()
+    }
 
     func update(connectivity status: ConnectivityStatus) {
         cachedConnectivity = status
@@ -838,7 +860,7 @@ final class FloatingPanel: NSPanel {
         if isStale,
            let last = lastOverride ?? staleness.lastNotifyAt(fieldKey: fieldKey) {
             label.isHidden = false
-            label.stringValue = "最后更新 \(Self.formatTimestamp(monotonic: last, now: now))"
+            label.stringValue = L10n.format("Last_Updated", Self.formatTimestamp(monotonic: last, now: now))
         } else {
             label.isHidden = true
             label.stringValue = ""
@@ -854,11 +876,11 @@ final class FloatingPanel: NSPanel {
         let connected = s.link.connected
         let dotColor: NSColor = connected ? .systemGreen : .systemGray
         hostDot.layer?.backgroundColor = dotColor.cgColor
-        var text = connected ? "已连接" : "未连接"
+        var text = connected ? L10n.text("Conn_Connected") : L10n.text("Conn_Disconnected")
         if !connected {
             switch s.link.lastDisconnectReason {
-            case .timeout:  text += "(超时)"
-            case .explicit: text += "(主动断开)"
+            case .timeout:  text += L10n.text("Conn_TimeoutSuffix")
+            case .explicit: text += L10n.text("Conn_ExplicitSuffix")
             case .unknown, .reserved: break
             }
         }
@@ -919,8 +941,8 @@ final class FloatingPanel: NSPanel {
             (leftOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
         splitRightDot.layer?.backgroundColor =
             (rightOnline ? NSColor.systemGreen : NSColor.systemRed).cgColor
-        splitLeftLabel.stringValue = leftOnline ? "左 在线" : "左 离线"
-        splitRightLabel.stringValue = rightOnline ? "右 在线" : "右 离线"
+        splitLeftLabel.stringValue = leftOnline ? L10n.text("Split_LeftOnline") : L10n.text("Split_LeftOffline")
+        splitRightLabel.stringValue = rightOnline ? L10n.text("Split_RightOnline") : L10n.text("Split_RightOffline")
 
         let isStale = isStaleTracked(fieldKey: "split_link", now: now)
         let alpha: CGFloat = isStale ? 0.5 : 1.0
@@ -1035,10 +1057,10 @@ final class FloatingPanel: NSPanel {
         endpointRow.isHidden = false
         let text: String
         switch s.output {
-        case .unknown: text = "输出:未知"
-        case .usb:     text = "输出:USB"
-        case .ble:     text = "输出:BLE"
-        case .reserved(let code): text = String(format: "输出:未知(0x%02X)", code)
+        case .unknown: text = L10n.text("Endpoint_Unknown")
+        case .usb:     text = L10n.text("Endpoint_Usb")
+        case .ble:     text = L10n.text("Endpoint_Ble")
+        case .reserved(let code): text = L10n.format("Endpoint_Reserved", code)
         }
         endpointLabel.stringValue = text
         let isStale = isStaleTracked(fieldKey: "output_endpoint", now: now)
@@ -1204,7 +1226,8 @@ final class FloatingPanel: NSPanel {
     }
 
     func update(_ status: KeyboardStatus) {
-        let txt = status.connected ? status.layerName : "未连接"
+        cachedStatus = status
+        let txt = status.connected ? status.layerName : L10n.text("State_Disconnected")
         layerLabel.stringValue = txt
         compactLayerLabel.stringValue = txt
         let active = [
@@ -1242,8 +1265,8 @@ fileprivate final class ProfileBadgeView: NSView {
 
         pendingHint.font = .systemFont(ofSize: 8, weight: .bold)
         pendingHint.textColor = .systemYellow
-        pendingHint.toolTip = "待配对"
-        pendingHint.setAccessibilityLabel("待配对")
+        pendingHint.toolTip = L10n.text("Conn_Pending")
+        pendingHint.setAccessibilityLabel(L10n.text("Conn_Pending"))
         pendingHint.isHidden = true
         pendingHint.translatesAutoresizingMaskIntoConstraints = false
         addSubview(pendingHint)
@@ -1261,6 +1284,9 @@ fileprivate final class ProfileBadgeView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     func apply(slotIndex: UInt8, isCurrent: Bool, isOpen: Bool) {
+        // Refresh localised hint so a language switch is reflected on next render.
+        pendingHint.toolTip = L10n.text("Conn_Pending")
+        pendingHint.setAccessibilityLabel(L10n.text("Conn_Pending"))
         indexLabel.stringValue = "\(slotIndex)"
         pendingHint.isHidden = !isOpen
         if isCurrent {
@@ -1352,8 +1378,8 @@ fileprivate final class BatteryBarView: NSView {
 
         chargingIcon.font = .systemFont(ofSize: 11, weight: .bold)
         chargingIcon.textColor = .systemYellow
-        chargingIcon.toolTip = "充电中"
-        chargingIcon.setAccessibilityLabel("充电中")
+        chargingIcon.toolTip = L10n.text("Conn_Charging")
+        chargingIcon.setAccessibilityLabel(L10n.text("Conn_Charging"))
         chargingIcon.isHidden = true
         chargingIcon.translatesAutoresizingMaskIntoConstraints = false
         addSubview(chargingIcon)
@@ -1402,22 +1428,26 @@ fileprivate final class BatteryBarView: NSView {
                     let stamp = BatteryBarView.timeFormatter.string(
                         from: Date().addingTimeInterval(-(max(0, now - frozen)))
                     )
-                    percentLabel.stringValue = "\(clamped)% · \(stamp)"
+                    percentLabel.stringValue = "\(L10n.format("Battery_Percent", clamped)) · \(stamp)"
                 } else {
                     _ = frozen  // retained for future debug / breakpoint use
-                    percentLabel.stringValue = "\(clamped)%"
+                    percentLabel.stringValue = L10n.format("Battery_Percent", clamped)
                 }
                 percentLabel.alphaValue = 0.65
             } else {
-                percentLabel.stringValue = "\(clamped)%"
+                percentLabel.stringValue = L10n.format("Battery_Percent", clamped)
                 percentLabel.alphaValue = 1.0
             }
         case .unavailable:
             fillWidthConstraint.constant = 0
             fill.isHidden = true
-            percentLabel.stringValue = "读取失败"
+            percentLabel.stringValue = L10n.text("Battery_ReadFailed")
             percentLabel.alphaValue = 1.0
         }
+        // Refresh the tooltip/accessibility label so a language switch that
+        // happens while charging is reflected on the next render.
+        chargingIcon.toolTip = L10n.text("Conn_Charging")
+        chargingIcon.setAccessibilityLabel(L10n.text("Conn_Charging"))
         chargingIcon.isHidden = !isCharging
     }
 

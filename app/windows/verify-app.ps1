@@ -7,15 +7,17 @@ launches the client, waits, then tells you whether it stayed alive or crashed
 
 USAGE (native Windows PowerShell 5.1 / 7 -- NOT WSL):
 
-  irm https://raw.githubusercontent.com/ykiewang/keybeacon/feat/windows-ble-probe/app/windows/verify-app.ps1 -OutFile verify-app.ps1
+  irm https://raw.githubusercontent.com/ykiewang/keybeacon/<branch>/app/windows/verify-app.ps1 -OutFile verify-app.ps1
   powershell -ExecutionPolicy Bypass -File .\verify-app.ps1
+  powershell -ExecutionPolicy Bypass -File .\verify-app.ps1 -Branch feat/bilingual-ui-language
 
-Re-run it anytime; it always pulls the latest fixes first.
+Re-run it anytime; it always pulls the latest fixes first (unless -NoPull).
 #>
 
 [CmdletBinding()]
 param(
     [string]$RepoDir = 'C:\Users\adawy\Documents\kbd\keybeacon',
+    [string]$Branch = 'feat/windows-ble-probe',
     [int]$WaitSeconds = 8,
     [switch]$NoPull
 )
@@ -25,7 +27,6 @@ $env:DOTNET_CLI_UI_LANGUAGE     = 'en'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO              = '1'
 
-$Branch  = 'feat/windows-ble-probe'
 $AppProj = 'app/windows/src/KeyBeacon.App/KeyBeacon.App.csproj'
 $LogDir  = Join-Path $env:LOCALAPPDATA 'KeyBeacon\logs'
 $CrashLog = Join-Path $LogDir 'crash.log'
@@ -78,11 +79,14 @@ try {
     Set-Location $RepoDir
 
     if (-not $NoPull) {
+        [void](Invoke-Native 'git' @('fetch', 'origin'))
         $cur = Get-NativeOutput 'git' @('rev-parse', '--abbrev-ref', 'HEAD')
         if ($cur -ne $Branch) {
-            [void](Invoke-Native 'git' @('checkout', $Branch))
+            $code = Invoke-Native 'git' @('checkout', $Branch)
+            if ($code -ne 0) {
+                [void](Invoke-Native 'git' @('checkout', '-b', $Branch, "origin/$Branch"))
+            }
         }
-        [void](Invoke-Native 'git' @('fetch', 'origin'))
         $code = Invoke-Native 'git' @('pull', '--ff-only', 'origin', $Branch)
         if ($code -ne 0) { Warn "git pull failed; building current HEAD." }
     }
