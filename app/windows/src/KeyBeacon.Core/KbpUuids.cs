@@ -15,6 +15,7 @@ public static class KbpUuids
     public static readonly Guid Status = new("aa440aa1-f5ed-4c48-84a1-8062d20d3d55");
     public static readonly Guid Connectivity = new("aa440aa2-f5ed-4c48-84a1-8062d20d3d55");
     public static readonly Guid Battery = new("aa440aa3-f5ed-4c48-84a1-8062d20d3d55");
+    public static readonly Guid LinkSlot = new("aa440aa4-f5ed-4c48-84a1-8062d20d3d55");
 
     private const string FamilySuffix = "-f5ed-4c48-84a1-8062d20d3d55";
 

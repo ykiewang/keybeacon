@@ -59,6 +59,10 @@ public static class DiagnosticEvents
     public const string ConnectivityShortPayload = "connectivity.short_payload";
     public const string DiscoveryAnomaly = "discovery.anomaly";
 
+    // per-link host context (spec 005 / KBP 1.2)
+    public const string HostLinkUnresolved = "hostlink.unresolved";
+    public const string HostLinkCannotDetermine = "hostlink.cannot_determine";
+
     // lifecycle / diagnostics
     public const string AppStarted = "app.started";
     public const string AppStopping = "app.stopping";

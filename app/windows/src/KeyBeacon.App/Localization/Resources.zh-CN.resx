@@ -211,4 +211,20 @@
   <data name="Dialog_Cancel" xml:space="preserve">
     <value>取消</value>
   </data>
+
+  <data name="HostLink_InUseHere" xml:space="preserve">
+    <value>正在此电脑使用</value>
+  </data>
+  <data name="HostLink_ActiveElsewhere" xml:space="preserve">
+    <value>键盘正在另一台电脑使用（P{0}）</value>
+  </data>
+  <data name="HostLink_OnUsb" xml:space="preserve">
+    <value>键盘在 USB 输出（非本 BLE 链路）</value>
+  </data>
+  <data name="HostLink_CannotDetermine" xml:space="preserve">
+    <value>无法确定</value>
+  </data>
+  <data name="HostLink_Disconnected" xml:space="preserve">
+    <value>未连接</value>
+  </data>
 </root>

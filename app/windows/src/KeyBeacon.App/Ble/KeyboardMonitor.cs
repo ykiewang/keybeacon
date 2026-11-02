@@ -45,13 +45,20 @@ public sealed class KeyboardMonitor : IAsyncDisposable
     private GattCharacteristic? _statusChar;
     private GattCharacteristic? _connChar;
     private GattCharacteristic? _batteryChar;
+    private GattCharacteristic? _linkSlotChar;
 
     private KeyboardStatus? _lastStatus;
     private ConnectivityStatus? _lastConnectivity;
     private BatteryStatus? _lastBattery;
+    private LinkSlot? _lastLinkSlot;
     private CapabilityMatrix? _capability;
     private byte[]? _pendingBattery; // cached until capability (isSplit) is known
     private byte _lastCapabilityByte;
+
+    // Last per-link status emitted, so degrade diagnostics
+    // (hostlink.unresolved / hostlink.cannot_determine) fire once per
+    // transition, not on every publish (FR-013).
+    private LocalHostStatus? _lastHostStatus;
 
     public KeyboardMonitor(ILoggerFactory loggerFactory, Action<Action> post, TimeSpan? timeout = null)
     {
@@ -211,6 +218,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             _statusChar = chars.Characteristics.FirstOrDefault(c => c.Uuid == KbpUuids.Status);
             _connChar = chars.Characteristics.FirstOrDefault(c => c.Uuid == KbpUuids.Connectivity);
             _batteryChar = chars.Characteristics.FirstOrDefault(c => c.Uuid == KbpUuids.Battery);
+            _linkSlotChar = chars.Characteristics.FirstOrDefault(c => c.Uuid == KbpUuids.LinkSlot);
 
             if (_statusChar is null)
             {
@@ -225,6 +233,16 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             await SubscribeAsync(_statusChar, FieldKeys.Status, OnStatusChanged);
             if (_connChar is not null) await SubscribeAsync(_connChar, FieldKeys.Connectivity, OnConnectivityChanged);
             if (_batteryChar is not null) await SubscribeAsync(_batteryChar, FieldKeys.Battery, OnBatteryChanged);
+
+            // KBP 1.2 Link-slot (AA4) is OPTIONAL and READ-only (no NOTIFY / no
+            // CCC). Read once; the per-connection response drives the five-state
+            // host status (spec 005, CF-2). Absence → old firmware → host never
+            // fabricates in-use/elsewhere (C-L2).
+            if (_linkSlotChar is not null)
+            {
+                var linkRaw = await ReadAsync(_linkSlotChar);
+                if (linkRaw is not null) HandleLinkSlot(linkRaw);
+            }
 
             _connLog.LogInformation("{Event} connected={Connected} reason_raw=0x00",
                 DiagnosticEvents.ConnectionStateChanged, true);
@@ -381,6 +399,14 @@ public sealed class KeyboardMonitor : IAsyncDisposable
         }
     }
 
+    private void HandleLinkSlot(byte[] value)
+    {
+        // AA4 is READ-only; the value is always THIS connection's slot — no
+        // READ/NOTIFY frame disambiguation needed (CF-2). Diagnostics wired in T027.
+        _lastLinkSlot = LinkSlot.Parse(value);
+        PublishConnected();
+    }
+
     // ---- connection / staleness ----
 
     private void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
@@ -413,6 +439,25 @@ public sealed class KeyboardMonitor : IAsyncDisposable
         if (_device is null) return;
         var name = _selectedId is not null && _knownDevices.TryGetValue(_selectedId, out var n) ? n : null;
 
+        // Per-link host status (spec 005): only when the keyboard exposes AA4 —
+        // old firmware shows no new UI (CF-8). Null → row hidden.
+        LocalHostStatus? hostStatus = _linkSlotChar is null
+            ? null
+            : HostContextStatus.DeriveLocalHostStatus(
+                hasAA4: true,
+                connected: true,
+                capability: _capability,
+                activeProfile: _lastConnectivity?.Profile,
+                localSlot: _lastLinkSlot,
+                output: _lastConnectivity?.Output);
+
+        // Degrade diagnostics fire exactly once per transition (FR-013).
+        if (!Equals(hostStatus, _lastHostStatus))
+        {
+            EmitHostStatusDiagnostics(hostStatus);
+            _lastHostStatus = hostStatus;
+        }
+
         var snapshot = new KeyboardSnapshot
         {
             State = MonitorState.Connected,
@@ -423,9 +468,38 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             Connectivity = _lastConnectivity,
             ConnectivityFreshness = Freshness(FieldKeys.Connectivity),
             Battery = _lastBattery,
-            BatteryFreshness = Freshness(FieldKeys.Battery)
+            BatteryFreshness = Freshness(FieldKeys.Battery),
+            HostStatus = hostStatus
         };
         Publish(snapshot);
+    }
+
+    /// <summary>
+    /// Emit exactly one structured diagnostic when the per-link status becomes
+    /// CannotDetermine, distinguishing "firmware returned slot 0"
+    /// (hostlink.unresolved) from host-side insufficiency
+    /// (hostlink.cannot_determine). Parity with macOS emitHostStatusDiagnostics.
+    /// </summary>
+    private void EmitHostStatusDiagnostics(LocalHostStatus? status)
+    {
+        if (status is not { Kind: LocalHostStatusKind.CannotDetermine }) return;
+
+        if (_lastLinkSlot is { Slot: 0 })
+        {
+            _connLog.LogInformation("{Event} reason={Reason}",
+                DiagnosticEvents.HostLinkUnresolved, "firmware_returned_slot_0");
+            return;
+        }
+
+        string missing =
+            _lastConnectivity is null ? "connectivity_unknown"
+            : _lastLinkSlot is null ? "link_slot_unread"
+            : _capability is not { HasProfile: true } ? "no_profile_capability"
+            : _lastConnectivity.Profile.IsOpen ? "profile_open"
+            : _lastConnectivity.Profile.Index == 0 ? "active_index_zero"
+            : "unknown";
+        _connLog.LogInformation("{Event} missing={Missing}",
+            DiagnosticEvents.HostLinkCannotDetermine, missing);
     }
 
     private FieldFreshness Freshness(string key)
@@ -475,6 +549,8 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             if (_connChar is not null) _connChar.ValueChanged -= OnConnectivityChanged;
             if (_batteryChar is not null) _batteryChar.ValueChanged -= OnBatteryChanged;
             _statusChar = _connChar = _batteryChar = null;
+            // AA4 has no ValueChanged subscription (READ-only); just drop the ref.
+            _linkSlotChar = null;
 
             if (_device is not null)
             {
@@ -486,8 +562,13 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             _lastStatus = null;
             _lastConnectivity = null;
             _lastBattery = null;
+            _lastLinkSlot = null;
             _capability = null;
             _pendingBattery = null;
+            // Reset per-link transition tracking so a fresh connection re-emits
+            // host-status diagnostics (parity with macOS dropActiveConnection /
+            // tearDown resetting lastHostStatus; FR-013).
+            _lastHostStatus = null;
             _tracker.Reset();
         }
         finally

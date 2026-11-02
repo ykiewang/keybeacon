@@ -39,6 +39,12 @@ public sealed record KeyboardSnapshot
     public BatteryStatus? Battery { get; init; }
     public FieldFreshness BatteryFreshness { get; init; } = new(true, null);
 
+    // KBP 1.2 — per-link host context (spec 005). Null when AA4 is absent or
+    // the link is down → the UI hides the per-link row and NEVER fabricates an
+    // in-use/elsewhere claim (FR-008, Principle IV). Nullable (not a bare
+    // struct) precisely so the default can never read as "in use here".
+    public LocalHostStatus? HostStatus { get; init; }
+
     public static KeyboardSnapshot ForState(MonitorState state, string? name = null) =>
         new() { State = state, KeyboardDisplayName = name };
 }

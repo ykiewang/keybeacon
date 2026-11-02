@@ -1,0 +1,262 @@
+using System;
+using KeyBeacon.Core;
+using Xunit;
+
+namespace KeyBeacon.Core.Tests;
+
+/// <summary>
+/// US1 (spec 005) pure-function tests: <see cref="LinkSlot.Parse"/> (T012) and
+/// <see cref="HostContextStatus.DeriveLocalHostStatus"/> five-state derivation
+/// (T013). Case-for-case parity with the macOS
+/// <c>HostLinkProfileAwarenessTests</c> (constitution §III).
+/// </summary>
+public class HostContextStatusTests
+{
+    private static byte[] Payload(params byte[] bytes) => bytes;
+
+    // --- T012: LinkSlot.Parse ---
+
+    [Fact]
+    public void LinkSlot_NotDetermined_Zero()
+    {
+        var s = LinkSlot.Parse(Payload(0x00));
+        Assert.Equal(new LinkSlot(0, false, 0), s);
+        Assert.False(s!.IsDetermined);
+    }
+
+    [Fact]
+    public void LinkSlot_OneBasedSlot()
+    {
+        var s = LinkSlot.Parse(Payload(0x01))!;
+        Assert.Equal(1, s.Slot);
+        Assert.True(s.IsDetermined);
+        Assert.False(s.ReservedBit7);
+    }
+
+    [Fact]
+    public void LinkSlot_Exhaustive_0_To_127()
+    {
+        for (byte raw = 0; raw <= 127; raw++)
+        {
+            var s = LinkSlot.Parse(Payload(raw))!;
+            Assert.Equal(raw, s.Slot);
+            Assert.False(s.ReservedBit7);
+            Assert.Equal(raw >= 1, s.IsDetermined);
+        }
+    }
+
+    [Fact]
+    public void LinkSlot_Bit7_IgnoredForSlotValue()
+    {
+        for (byte slot = 0; slot <= 127; slot++)
+        {
+            byte raw = (byte)(slot | 0x80);
+            var s = LinkSlot.Parse(Payload(raw))!;
+            Assert.Equal(slot, s.Slot);
+            Assert.True(s.ReservedBit7);
+        }
+    }
+
+    [Fact]
+    public void LinkSlot_EmptyPayload_ReturnsNull()
+    {
+        Assert.Null(LinkSlot.Parse(ReadOnlySpan<byte>.Empty));
+    }
+
+    [Fact]
+    public void LinkSlot_TrailingBytesIgnored()
+    {
+        var s = LinkSlot.Parse(Payload(0x02, 0xAA, 0xBB, 0xCC))!;
+        Assert.Equal(2, s.Slot);
+        Assert.Equal(3, s.TrailingBytesIgnored);
+    }
+
+    [Fact]
+    public void LinkSlot_IsWithinRange()
+    {
+        Assert.True(new LinkSlot(3, false, 0).IsWithinRange(5));
+        Assert.True(new LinkSlot(5, false, 0).IsWithinRange(5));
+        Assert.False(new LinkSlot(6, false, 0).IsWithinRange(5));
+        Assert.False(new LinkSlot(0, false, 0).IsWithinRange(5));
+        Assert.True(new LinkSlot(9, false, 0).IsWithinRange(0));
+        Assert.False(new LinkSlot(0, false, 0).IsWithinRange(0));
+    }
+
+    // --- T013: DeriveLocalHostStatus helpers ---
+
+    private static CapabilityMatrix Cap(bool hasProfile = true, bool hasOutputEndpoint = false) => new(
+        IsSplit: false,
+        HasHostConnection: true,
+        HasProfile: hasProfile,
+        HasSplitLink: false,
+        HasOutputEndpoint: hasOutputEndpoint,
+        HasLeftCharging: false,
+        HasRightCharging: false,
+        Reserved7: false);
+
+    private static ConnectivityStatus.ProfileData Profile(byte index, bool isOpen = false, byte maxSlots = 5)
+        => new(index, isOpen, maxSlots);
+
+    private static readonly ConnectivityStatus.OutputEndpoint Usb = ConnectivityStatus.OutputEndpoint.FromByte(1);
+    private static readonly ConnectivityStatus.OutputEndpoint Ble = ConnectivityStatus.OutputEndpoint.FromByte(2);
+
+    // --- T013: disconnected (highest priority) ---
+
+    [Fact]
+    public void Derive_Disconnected_WhenNotConnected_RegardlessOfOtherInputs()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: false,
+            capability: Cap(hasOutputEndpoint: true),
+            activeProfile: Profile(2), localSlot: new LinkSlot(2, false, 0), output: Usb);
+        Assert.Equal(LocalHostStatus.Disconnected, status);
+    }
+
+    // --- T013: onUsb (before in-use over BLE) ---
+
+    [Fact]
+    public void Derive_OnUsb_WhenOutputUsbAndCapable()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(hasOutputEndpoint: true),
+            activeProfile: Profile(2), localSlot: new LinkSlot(2, false, 0), output: Usb);
+        Assert.Equal(LocalHostStatus.OnUsb, status);
+    }
+
+    [Fact]
+    public void Derive_OnUsb_TakesPrecedenceOverInUseHere()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(hasOutputEndpoint: true),
+            activeProfile: Profile(3), localSlot: new LinkSlot(3, false, 0), output: Usb);
+        Assert.Equal(LocalHostStatus.OnUsb, status);
+    }
+
+    [Fact]
+    public void Derive_NotOnUsb_WhenOutputUsbButCapabilityOff()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(hasOutputEndpoint: false),
+            activeProfile: Profile(2), localSlot: new LinkSlot(2, false, 0), output: Usb);
+        Assert.Equal(LocalHostStatus.InUseHere, status);
+    }
+
+    // --- T013: cannotDetermine ---
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenNoAA4()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: false, connected: true,
+            capability: Cap(), activeProfile: Profile(2),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenNoProfileCapability()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(hasProfile: false), activeProfile: Profile(2),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenActiveIndexZero()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(0),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenProfileOpen()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(2, isOpen: true),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenLocalSlotNull()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(2),
+            localSlot: null, output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenLocalSlotZero()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(2),
+            localSlot: new LinkSlot(0, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    [Fact]
+    public void Derive_CannotDetermine_WhenCapabilityNull()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: null, activeProfile: Profile(2),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.CannotDetermine, status);
+    }
+
+    // --- T013: inUseHere / activeElsewhere ---
+
+    [Fact]
+    public void Derive_InUseHere_WhenActiveEqualsLocal()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(3),
+            localSlot: new LinkSlot(3, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.InUseHere, status);
+    }
+
+    [Fact]
+    public void Derive_ActiveElsewhere_WhenActiveDiffersFromLocal()
+    {
+        var status = HostContextStatus.DeriveLocalHostStatus(
+            hasAA4: true, connected: true,
+            capability: Cap(), activeProfile: Profile(1),
+            localSlot: new LinkSlot(2, false, 0), output: Ble);
+        Assert.Equal(LocalHostStatus.ActiveElsewhere(1), status);
+    }
+
+    // --- T013: exhaustive active × local matrix (the in-use/elsewhere core) ---
+
+    [Fact]
+    public void Derive_Exhaustive_ActiveVsLocal_Matrix()
+    {
+        const byte maxSlots = 4;
+        for (byte active = 1; active <= maxSlots; active++)
+        {
+            for (byte local = 1; local <= maxSlots; local++)
+            {
+                var status = HostContextStatus.DeriveLocalHostStatus(
+                    hasAA4: true, connected: true,
+                    capability: Cap(), activeProfile: Profile(active, maxSlots: maxSlots),
+                    localSlot: new LinkSlot(local, false, 0), output: Ble);
+                if (active == local)
+                    Assert.Equal(LocalHostStatus.InUseHere, status);
+                else
+                    Assert.Equal(LocalHostStatus.ActiveElsewhere(active), status);
+            }
+        }
+    }
+}

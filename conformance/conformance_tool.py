@@ -5,10 +5,10 @@
 # ============================================================================
 # KeyBeacon Protocol (KBP) conformance self-test — cross-platform (bleak).
 #
-# Covers KBP 1.0 (C1-C6) + KBP 1.1 (C7-C12). Runs on macOS 12+, Linux
-# (BlueZ 5.56+), and Windows 10+. The macOS-only PyObjC legacy tool at
-# conformance/conformance_tool_macos.py is retained for KBP 1.0 regression and
-# as a fallback when `bleak` is unavailable.
+# Covers KBP 1.0 (C1-C6) + KBP 1.1 (C7-C12) + KBP 1.2 (C13-C14). Runs on
+# macOS 12+, Linux (BlueZ 5.56+), and Windows 10+. The macOS-only PyObjC legacy
+# tool at conformance/conformance_tool_macos.py is retained for KBP 1.0
+# regression and as a fallback when `bleak` is unavailable.
 #
 # Exit codes (per contracts/conformance-cli.md section 2):
 #   0  all REQUIRED items pass (or skipped as not-applicable)
@@ -27,7 +27,7 @@
 #   1. run `--list-connected` to find the keyboard's CoreBluetooth identifier;
 #   2. rerun with `--address <id>` to skip scan and probe directly.
 #
-# For wire details: ../protocol/README.md (KBP 1.0 sections 1-13, KBP 1.1 section 14).
+# For wire details: ../protocol/README.md (KBP 1.0 sections 1-13, KBP 1.1 section 14, KBP 1.2 section 15).
 # For user-visible contract: specs/001-connectivity-power/contracts/conformance-cli.md.
 # ============================================================================
 
@@ -53,10 +53,11 @@ SERVICE_UUID = "aa440aa0-f5ed-4c48-84a1-8062d20d3d55"
 CHAR_STATUS_UUID = "aa440aa1-f5ed-4c48-84a1-8062d20d3d55"       # KBP 1.0
 CHAR_CONNECTIVITY_UUID = "aa440aa2-f5ed-4c48-84a1-8062d20d3d55"  # KBP 1.1
 CHAR_BATTERY_UUID = "aa440aa3-f5ed-4c48-84a1-8062d20d3d55"       # KBP 1.1
+CHAR_LINK_SLOT_UUID = "aa440aa4-f5ed-4c48-84a1-8062d20d3d55"     # KBP 1.2
 CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 HID_SERVICE_UUID = "00001812-0000-1000-8000-00805f9b34fb"
 
-TOOL_VERSION = "1.1.0"
+TOOL_VERSION = "1.2.0"
 TOOL_NAME = "conformance_tool.py"
 JSON_SPEC_VERSION = "kbp-conformance-cli/1"
 
@@ -177,6 +178,33 @@ def _battery_reading(byte: int) -> dict[str, Any]:
         return {"raw": byte, "state": "unavailable"}
     # 101-254 are reserved; render as unavailable + out_of_range flag (C-B3).
     return {"raw": byte, "state": "unavailable", "out_of_range": True}
+
+
+def parse_link_slot(data: bytes) -> dict[str, Any] | None:
+    """Parse a KBP 1.2 Link-slot characteristic (AA440AA4-…) payload.
+
+    Returns a dict describing the 1-based profile slot that *this* BLE
+    connection maps to, or None if the payload is empty (invariant HW-L1:
+    length >= 1 byte). Bytes beyond index 0 are reserved trailing bytes and
+    ignored (consumer MUST ignore, MINOR forward-compatibility).
+
+    Field layout (protocol/README.md section 15 /
+    contracts/host-link-context.md HW-1..HW-6):
+    - `[0]` bits 0-6 = `local_link_profile` — the 1-based slot (0 = not
+      determined / not applicable).
+    - `[0]` bit 7 = reserved (MUST be 0; recorded for diagnostics, tolerated).
+    """
+    if not isinstance(data, (bytes, bytearray)) or len(data) < 1:
+        return None
+    byte0 = data[0]
+    slot = byte0 & 0x7F
+    return {
+        "raw": byte0,
+        "slot": slot,
+        "not_determined": slot == 0,
+        "reserved_bit7": bool(byte0 & 0x80),
+        "trailing_bytes_ignored": len(data) - 1,
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -523,6 +551,94 @@ def check_us4_charging(parsed: dict[str, Any], extras: dict[str, Any]) -> None:
 
 
 # -----------------------------------------------------------------------------
+# T008 (KBP 1.2 / US5): Link-slot characteristic (AA440AA4-…) checks C13 + C14
+# -----------------------------------------------------------------------------
+
+
+def check_us5_link_slot(
+    raw: bytes | None,
+    chars_present: dict[str, Any],
+    profile_max_slots: int | None,
+    extras: dict[str, Any],
+    report: "Report",
+) -> None:
+    """Evaluate the KBP 1.2 Link-slot characteristic (AA440AA4-…): C13 + C14.
+
+    Rules (checklist C13/C14; contracts/host-link-context.md HW-1..HW-6):
+    - characteristic absent → C13/C14 remain SKIP; field_support.link_slot
+      stays "unsupported".
+    - C13 (read-only shape): properties MUST be exactly READ — advertising
+      NOTIFY/INDICATE or exposing a CCC (0x2902) descriptor is a FAIL; the READ
+      MUST return >= 1 byte and `[0]` bit 7 (reserved) MUST be 0.
+    - C14 (slot range): slot = `[0]` bits 0-6 MUST be in {0} ∪ [1,
+      profile_max_slots] (0 = not-determined is always allowed). When the
+      Connectivity characteristic (AA2) is absent there is no profile_max_slots
+      to bound against → WARN (cannot range-check, not a hard failure).
+    """
+    field_support = extras["field_support"]
+    info = chars_present.get("AA440AA4", {})
+
+    if not info.get("present", False):
+        field_support["link_slot"] = "unsupported"
+        return
+
+    # --- C13: read-only properties + payload shape + reserved bit ---
+    c13_issues: list[str] = []
+    props = sorted(p.upper() for p in info.get("properties", []))
+    if any(p in ("NOTIFY", "INDICATE") for p in props):
+        c13_issues.append(f"AA4 MUST be READ-only but advertises {props}")
+    if "READ" not in props:
+        c13_issues.append("AA4 missing the READ property")
+    if info.get("ccc", False):
+        c13_issues.append("AA4 MUST NOT expose a CCC (0x2902) descriptor")
+
+    if raw is None:
+        c13_issues.append("AA4 READ returned no data (characteristic present)")
+        parsed = None
+    else:
+        parsed = parse_link_slot(bytes(raw))
+        if parsed is None:
+            c13_issues.append(f"AA4 payload shorter than 1 byte ({len(raw)} bytes)")
+        elif parsed["reserved_bit7"]:
+            c13_issues.append("[0] bit 7 (reserved) MUST be 0")
+
+    if c13_issues:
+        report.set("C13", "FAIL", " | ".join(c13_issues))
+        field_support["link_slot"] = "malformed"
+    else:
+        report.set("C13", "PASS", None)
+
+    # --- C14: slot range (0 always allowed; non-zero within profile_max_slots) ---
+    if parsed is None:
+        report.set("C14", "SKIP", "no readable AA4 payload to range-check")
+        return
+
+    extras["link_slot_parsed"] = parsed
+    slot = parsed["slot"]
+    if slot == 0:
+        report.set("C14", "PASS", "slot = 0 (not determined / not applicable)")
+    elif profile_max_slots is None:
+        report.set(
+            "C14",
+            "WARN",
+            f"slot = {slot} but Connectivity (AA2) absent; cannot bound by "
+            "profile_max_slots",
+        )
+    elif slot > profile_max_slots:
+        report.set(
+            "C14",
+            "FAIL",
+            f"slot ({slot}) > profile_max_slots ({profile_max_slots})",
+        )
+        field_support["link_slot"] = "malformed"
+    else:
+        report.set("C14", "PASS", None)
+
+    if field_support.get("link_slot") != "malformed":
+        field_support["link_slot"] = "supported"
+
+
+# -----------------------------------------------------------------------------
 # Report model
 # -----------------------------------------------------------------------------
 
@@ -598,6 +714,16 @@ CHECKLIST_SPEC: list[CheckResult] = [
         item_id="C12",
         level="MANUAL",
         description="Split: 1.1 characteristics only on the central (host-link) role",
+    ),
+    CheckResult(
+        item_id="C13",
+        level="REQUIRED_IF_PRESENT",
+        description="AA440AA4-… Link-slot characteristic: READ-only (no NOTIFY/CCC), >= 1 byte, [0] bit 7 = 0",
+    ),
+    CheckResult(
+        item_id="C14",
+        level="REQUIRED_IF_PRESENT",
+        description="Link-slot [0] bits 0-6 in {0} ∪ [1, profile_max_slots]",
     ),
 ]
 
@@ -700,7 +826,7 @@ class Report:
         )
         # Characteristics block (J-4: AA ordering).
         characteristics = {}
-        for key in ("AA440AA1", "AA440AA2", "AA440AA3"):
+        for key in ("AA440AA1", "AA440AA2", "AA440AA3", "AA440AA4"):
             info = chars_present.get(key, {})
             characteristics[key] = {
                 "present": bool(info.get("present", False)),
@@ -763,6 +889,7 @@ def default_field_support(declared_minor: str) -> dict[str, str]:
         "output_endpoint": "skipped",
         "left_charging": "skipped",
         "right_charging": "skipped",
+        "link_slot": "skipped",
     }
     return base
 
@@ -1016,6 +1143,26 @@ async def discover_and_check(args: argparse.Namespace, report: Report) -> dict[s
                     )
                 _finalise_c8(extras, report)
 
+            # KBP 1.2: Link-slot characteristic (AA440AA4-…). Independent of
+            # declared_minor — read + range-check whenever AA4 is present (a
+            # 1.2 keyboard without AA2 is anomalous but still probed; C14 then
+            # WARNs because profile_max_slots cannot be resolved).
+            if extras["characteristics_present"].get("AA440AA4", {}).get("present", False):
+                link_raw = await _read_link_slot_raw(client, extras)
+                parsed_conn = extras.get("connectivity_parsed")
+                max_slots = (
+                    parsed_conn["profile"]["max_slots"]
+                    if parsed_conn is not None
+                    else None
+                )
+                check_us5_link_slot(
+                    link_raw,
+                    extras["characteristics_present"],
+                    max_slots,
+                    extras,
+                    report,
+                )
+
             # Foundational-phase: C1-C6 and C7-C12 are left as SKIP with a note
             # pointing at the US-phase tasks that will fill them in. The
             # scaffolding itself (discovery + connect + GATT walk) is validated
@@ -1084,6 +1231,27 @@ async def _read_battery_raw(client, extras: dict[str, Any]) -> bytes | None:
     return raw_bytes
 
 
+async def _read_link_slot_raw(client, extras: dict[str, Any]) -> bytes | None:
+    """READ the Link-slot characteristic (AA440AA4-…) once; return raw bytes
+    or None.
+
+    Only called when AA440AA4-… is present. Errors are non-fatal: the caller
+    (check_us5_link_slot) reports them against C13. Raw bytes are stashed in
+    extras["link_slot_raw_hex"] for the JSON output.
+    """
+    chars_present = extras.get("characteristics_present", {})
+    if not chars_present.get("AA440AA4", {}).get("present", False):
+        return None
+    try:
+        raw = await client.read_gatt_char(CHAR_LINK_SLOT_UUID)
+    except Exception as exc:  # noqa: BLE001 — any BLE failure here is non-fatal
+        extras["link_slot_read_error"] = str(exc)
+        return None
+    raw_bytes = bytes(raw)
+    extras["link_slot_raw_hex"] = raw_bytes.hex()
+    return raw_bytes
+
+
 def _choose_candidate(devices: list, device_filter: str | None):
     if not devices:
         return None
@@ -1102,6 +1270,7 @@ async def _probe_characteristics(services, extras: dict[str, Any], report: Repor
         "AA440AA1": {"present": False, "properties": [], "ccc": False},
         "AA440AA2": {"present": False, "properties": [], "ccc": False},
         "AA440AA3": {"present": False, "properties": [], "ccc": False},
+        "AA440AA4": {"present": False, "properties": [], "ccc": False},
     }
     for service in services:
         if service.uuid.lower() != SERVICE_UUID:
@@ -1115,6 +1284,8 @@ async def _probe_characteristics(services, extras: dict[str, Any], report: Repor
                 short_key = "AA440AA2"
             elif uuid_lower == CHAR_BATTERY_UUID:
                 short_key = "AA440AA3"
+            elif uuid_lower == CHAR_LINK_SLOT_UUID:
+                short_key = "AA440AA4"
             if short_key is None:
                 continue
             props = sorted(set(p.upper() for p in char.properties))
@@ -1149,6 +1320,8 @@ def _mark_skip_with_us_phase_notes(report: Report) -> None:
         "C10": ("SKIP", "implemented in user story phases (T025 NOTIFY on state change)"),
         "C11": ("SKIP", "implemented in user story 2 (T031 Battery NOTIFY throttling)"),
         "C12": ("MANUAL", "verify in firmware: 1.1 characteristics only in central image"),
+        "C13": ("SKIP", "evaluated when AA440AA4-… is present (KBP 1.2 Link-slot)"),
+        "C14": ("SKIP", "evaluated when AA440AA4-… is present (KBP 1.2 Link-slot)"),
     }
     for item_id, (status, note) in us_notes.items():
         current = report.results.get(item_id)

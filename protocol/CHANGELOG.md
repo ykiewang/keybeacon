@@ -12,6 +12,50 @@ implementers (apps, firmware pins) resolve against.
 The format follows [Keep a Changelog](https://keepachangelog.com/) loosely and
 [Semantic Versioning](https://semver.org/).
 
+## 1.2.0
+
+**Released as tag `protocol-v1.2.0`.** MINOR amendment to KBP 1.x; the KBP 1.0
+and 1.1 wire contracts are **unchanged**.
+
+### Added
+
+- **One new optional, read-only characteristic** under the same primary service
+  `AA440AA0-F5ED-4C48-84A1-8062D20D3D55`:
+  - **Link-slot characteristic** `AA440AA4-F5ED-4C48-84A1-8062D20D3D55`
+    (`READ` only — **no NOTIFY, no CCC**). Fixed **≥ 1-byte little-endian**
+    payload: `[0]` `local_link_profile` — bits 0–6 = the 1-based profile slot
+    **this BLE connection** maps to (`0` = not determined / not applicable),
+    bit 7 reserved (MUST be 0); `[1..]` reserved trailing bytes (consumer MUST
+    ignore).
+- **Per-connection semantics**: because a GATT READ is per-connection and the
+  characteristic has no NOTIFY, each host learns **its own** bonded slot with
+  zero configuration, disambiguating "in use on this computer" from "active on
+  another computer" across hosts bonded simultaneously.
+- **Checklist items C13–C14** in the conformance kit, covering `AA4` presence,
+  read-only properties (no NOTIFY/CCC), payload length, the reserved bit, and
+  the slot range.
+
+### Changed
+
+- **README** adds a §13 Changelog entry for 1.2.0 and the full §15 KBP 1.2
+  normative section (English + Chinese side-by-side).
+- **No wire change** to KBP 1.0 / 1.1: the service UUID and the
+  `AA440AA1/AA2/AA3-…` payloads remain **byte-identical**.
+
+### Deprecated
+
+- Nothing.
+
+### Migration
+
+| Combination | Result |
+|-------------|--------|
+| KBP ≤ 1.1 firmware + KBP 1.2 host | Host finds no `AA440AA4-…` on GATT discovery; it renders link-level status only and never fabricates an "in use here / active elsewhere" claim; all 1.0/1.1 behaviour is identical. |
+| KBP 1.2 firmware + KBP ≤ 1.1 host | Old host does not discover/read `AA440AA4-…` (not in its characteristic list); `AA440AA1/AA2/AA3-…` parse byte-identically; no new UI appears. |
+| KBP 1.2 firmware that cannot resolve a connection's peer to a slot | Firmware emits `local_link_profile = 0` (not-determined); the host shows "cannot determine" and never guesses a slot. |
+
+See `specs/005-host-link-profile-awareness/` for the full design.
+
 ## 1.1.0
 
 **Released as tag `protocol-v1.1.0`.** MINOR amendment to KBP 1.x; the KBP 1.0
@@ -124,6 +168,45 @@ the existing contract; it does not alter bytes on the air.
 
 格式大致遵循 [Keep a Changelog](https://keepachangelog.com/) 与
 [语义化版本](https://semver.org/)。
+
+## 1.2.0
+
+**以标签 `protocol-v1.2.0` 发布。** KBP 1.x 的 MINOR 修订；KBP 1.0 与 1.1 的
+线上合约均**不变**。
+
+### 新增
+
+- 在同一主服务 `AA440AA0-F5ED-4C48-84A1-8062D20D3D55` 下 **新增一个可选、只读特征**：
+  - **Link-slot 特征** `AA440AA4-F5ED-4C48-84A1-8062D20D3D55`
+    （`READ` only —— **无 NOTIFY、无 CCC**）。固定 **≥ 1 字节、小端序** 载荷：
+    `[0]` `local_link_profile` —— bits 0–6 = **本 BLE 连接** 对应的 1 起 profile
+    槽位（`0` = 未确定 / 不适用），bit 7 保留（必须 为 0）；`[1..]` 保留尾部字节
+    （消费者 必须 忽略）。
+- **每连接语义**：由于 GATT READ 是每连接的且该特征无 NOTIFY，每台主机**零配置**
+  学到**它自己**的已绑定槽位，从而在同时绑定的多台主机间区分"在此电脑使用"与
+  "在另一台电脑使用"。
+- 一致性套件新增 **C13–C14** 条目，覆盖 `AA4` 存在性、只读属性（无 NOTIFY/CCC）、
+  载荷长度、保留位与槽位范围。
+
+### 变更
+
+- **README** 新增 §13 Changelog 1.2.0 条目与完整的 §15 KBP 1.2 规范章节
+  （英中双语并排）。
+- KBP 1.0 / 1.1 **无线上变更**：服务 UUID 与 `AA440AA1/AA2/AA3-…` 载荷均**字节一致**。
+
+### 弃用
+
+- 无。
+
+### 迁移
+
+| 组合 | 结果 |
+|------|------|
+| KBP ≤ 1.1 固件 + KBP 1.2 主机 | GATT 发现时主机找不到 `AA440AA4-…`；仅渲染链路级状态，绝不臆造"在此使用 / 在别处使用"；1.0/1.1 行为完全一致。 |
+| KBP 1.2 固件 + KBP ≤ 1.1 主机 | 老主机不发现/不读 `AA440AA4-…`（不在其特征列表）；`AA440AA1/AA2/AA3-…` 解析字节一致；无新 UI。 |
+| KBP 1.2 固件无法把连接 peer 解析到槽位 | 固件发 `local_link_profile = 0`（未确定）；主机显示"无法确定"，绝不猜测槽位。 |
+
+完整设计见 `specs/005-host-link-profile-awareness/`。
 
 ## 1.1.0
 

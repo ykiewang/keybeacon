@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft
+**Status**: Planned
 
 **Input**: User description: "去啃固件侧的方案 2" — make each connected host able to answer, unambiguously and with **zero user configuration**, whether the keyboard is *currently sending keystrokes to this computer* (as opposed to merely having a live BLE link while typing on a different machine). This is the "per-connection host context" (方案 2) approach, chosen over the manual "which slot am I?" setting (方案 1).
 
@@ -16,8 +16,8 @@
 
 **Related work (read-only here)**:
 
-- Protocol §9 / §14.6 (MINOR additive evolution, reserved trailing bytes): `protocol/README.md`.
-- Protocol §14.3.1 (the reserved trailing-byte region is the sanctioned MINOR extension point).
+- Protocol §9 / §14.6 (MINOR additive evolution — a MINOR MAY add a **new optional characteristic**; this is the extension point this feature uses): `protocol/README.md`.
+- Protocol §14.5 (capability discovery by characteristic presence — how a host detects the added characteristic).
 - Existing firmware producer and host consumers (macOS `app/macos/**`, Windows `app/windows/**`) remain the implementers of this spec.
 
 ---
@@ -93,6 +93,8 @@ A user on the currently released firmware (no per-link field) with the new app, 
 
 **Per-link host context (the core new signal)**
 
+> **Producer / consumer split**: FR-001–FR-003 are **firmware (producer) obligations**, implemented in the sibling **`zmk-keybeacon`** repo (shipped as the new MINOR firmware). This repository delivers only the *contract* (`protocol/` AA4 definition), the *conformance vectors* (checklist C13/C14), and the *host consumers* (macOS/Windows) that read and honour the value — never the firmware that produces it.
+
 - **FR-001**: The keyboard MUST expose, **per BLE connection**, the profile (host slot) that this specific connection corresponds to, obtainable by that host on connect via a per-connection read. A host MUST NOT need any prior configuration to obtain its own slot.
 - **FR-002**: The per-link slot value MUST be `1`-based (matching the existing `profile_index` wire convention) with a single reserved value meaning "not determined / not applicable".
 - **FR-003**: When the firmware cannot resolve the connection's peer to a bonded profile, it MUST emit the "not determined" reserved value — it MUST NOT emit a guessed slot.
@@ -109,7 +111,7 @@ A user on the currently released firmware (no per-link field) with the new app, 
 
 **Backward compatibility & protocol evolution**
 
-- **FR-011**: The change MUST be a **KBP MINOR** evolution: the service UUID stays unchanged, all previously published bytes keep identical offsets and meaning, and the new information is carried only in the sanctioned additive extension point (reserved trailing bytes and/or the existing optional characteristics). (Constitution §II.)
+- **FR-011**: The change MUST be a **KBP MINOR** evolution: the service UUID stays unchanged, all previously published bytes keep identical offsets and meaning, and the new information is carried only in a sanctioned additive extension point — **a new optional characteristic** and/or reserved trailing bytes on an existing characteristic. This feature uses a **new optional read-only characteristic** (`AA440AA4-…`); no existing characteristic's bytes change. (Constitution §II.)
 - **FR-012**: A host that does not understand the new signal MUST continue to parse all prior fields byte-identically and observe no new UI. A per-link-aware host against firmware lacking the signal MUST fall back to link-level status without fabricating the "active elsewhere" claim.
 - **FR-013**: Every degradation path (FR-003, FR-008, edge cases) MUST emit exactly one structured diagnostic log entry, per the existing degradation-logging convention.
 
@@ -120,7 +122,7 @@ A user on the currently released firmware (no per-link field) with the new app, 
 
 ### Key Entities *(include if feature involves data)*
 
-- **Local Link Slot**: the profile index that *this* BLE connection maps to (per host, per connection). Attributes: `slot` (1-based or "not determined"), source = per-connection read.
+- **Local Link Slot**: the profile index that *this* BLE connection maps to (per host, per connection). Attributes: `slot` (1-based or "not determined"), source = per-connection read of the new read-only characteristic (`AA440AA4-…`).
 - **Active Slot**: the keyboard's globally active profile index, already broadcast in the Connectivity payload. Shared, identical across hosts.
 - **Local Host Status** (derived): one of {in-use-here, active-elsewhere(slot N), on-usb, cannot-determine, disconnected}. Derived from Local Link Slot + Active Slot + output endpoint + link state.
 - **Output Endpoint**: existing field (USB/BLE/unknown), reused to distinguish "on USB" from "over this BLE link".
@@ -139,7 +141,7 @@ A user on the currently released firmware (no per-link field) with the new app, 
 
 - The ZMK public API `zmk_ble_profile_index(const bt_addr_le_t *addr)` reliably maps a live connection's peer address to a bonded slot on the supported known-good pins. If a host's connection uses a resolvable-private-address whose peer does not compare equal to the bonded address, firmware emits the "not determined" sentinel (FR-003) and the host shows *cannot determine* — this is an accepted, honest degradation, not a failure.
 - "Keyboard active on another computer (slot N)" is acceptable UX; the exact wording may change but the three-way distinction (here / elsewhere / cannot-determine) is the requirement.
-- The keyboard supports the existing KBP 1.1 Connectivity characteristic; the per-link signal rides on it rather than introducing a new top-level surface.
+- The keyboard supports the existing KBP 1.1 Connectivity characteristic. The per-link signal is carried by a **new, independent read-only characteristic** (`AA440AA4-…`) under the same (unchanged) service UUID — chosen over riding on the Connectivity characteristic because a read-only characteristic cannot emit broadcast notifications, so a host's read is guaranteed to be its own per-connection value. All existing characteristics (AA0/AA1/AA2/AA3) stay byte-identical.
 - Both host platforms (macOS, Windows) share the same wire contract and the same five-state status semantics; only the UI chrome differs.
 - A reference keyboard and a second computer are available for end-to-end verification (per the Platform Scope & Delivery section of the constitution).
 - Firmware changes ship from the sibling `zmk-keybeacon` repo as a new MINOR release and are flashed by the user; the app must therefore work correctly against both the old and new firmware during the transition.

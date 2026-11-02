@@ -73,6 +73,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _showBattery;
     public bool ShowBattery { get => _showBattery; private set => Set(ref _showBattery, value); }
 
+    // KBP 1.2 per-link "this computer" status (spec 005). Distinct from the
+    // global host-link connectivity row: answers "in use *here* vs *elsewhere*".
+    // Hidden unless the keyboard exposes AA4 (old firmware → no new UI, CF-8).
+    private bool _showHostStatus;
+    public bool ShowHostStatus { get => _showHostStatus; private set => Set(ref _showHostStatus, value); }
+    private string _hostStatusText = string.Empty;
+    public string HostStatusText { get => _hostStatusText; private set => Set(ref _hostStatusText, value); }
+    private Brush _hostStatusDot = DotGray;
+    public Brush HostStatusDot { get => _hostStatusDot; private set => Set(ref _hostStatusDot, value); }
+
     // Display-mode (full vs single-row compact), driven from the tray menu and
     // persisted in settings. Mirrors macOS DisplayMode.
     private bool _showFull = true;
@@ -126,6 +136,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private static readonly Brush DotGreen = FrozenBrush(0x34, 0xC7, 0x59);
     private static readonly Brush DotRed = FrozenBrush(0xFF, 0x3B, 0x30);
     private static readonly Brush DotGray = FrozenBrush(0x8E, 0x8E, 0x93);
+    private static readonly Brush DotOrange = FrozenBrush(0xFF, 0x9F, 0x0A);
+    private static readonly Brush DotBlue = FrozenBrush(0x0A, 0x84, 0xFF);
 
     private static Brush FrozenBrush(byte r, byte g, byte b)
     {
@@ -170,6 +182,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplyStatus(connected ? s.Status : null, s.StatusFreshness);
         ApplyConnectivity(connected ? s.Connectivity : null, connected ? s.Capability : null);
         ApplyBattery(connected ? s.Battery : null, connected ? s.Capability : null);
+        ApplyHostStatus(connected ? s.HostStatus : null);
         ApplyCompact(s, connected);
     }
 
@@ -350,6 +363,47 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         ShowBattery = BatteryRows.Count > 0;
+    }
+
+    /// <summary>
+    /// Renders the KBP 1.2 per-link "this computer" status (spec 005), the
+    /// five-state <see cref="LocalHostStatus"/>. Case-for-case parity with the
+    /// macOS <c>renderLocalHostRow</c>: null → hide (no AA4 / link down, CF-8);
+    /// otherwise a coloured dot + localized text, with the active slot rendered
+    /// as "P{N}" for <see cref="LocalHostStatusKind.ActiveElsewhere"/>.
+    /// </summary>
+    private void ApplyHostStatus(LocalHostStatus? status)
+    {
+        if (status is not { } hs)
+        {
+            ShowHostStatus = false;
+            return;
+        }
+
+        ShowHostStatus = true;
+        switch (hs.Kind)
+        {
+            case LocalHostStatusKind.InUseHere:
+                HostStatusDot = DotGreen;
+                HostStatusText = _loc.Get("HostLink_InUseHere");
+                break;
+            case LocalHostStatusKind.ActiveElsewhere:
+                HostStatusDot = DotOrange;
+                HostStatusText = _loc.Format("HostLink_ActiveElsewhere", hs.Slot);
+                break;
+            case LocalHostStatusKind.OnUsb:
+                HostStatusDot = DotBlue;
+                HostStatusText = _loc.Get("HostLink_OnUsb");
+                break;
+            case LocalHostStatusKind.CannotDetermine:
+                HostStatusDot = DotGray;
+                HostStatusText = _loc.Get("HostLink_CannotDetermine");
+                break;
+            case LocalHostStatusKind.Disconnected:
+                HostStatusDot = DotGray;
+                HostStatusText = _loc.Get("HostLink_Disconnected");
+                break;
+        }
     }
 
     private string OutputLabel(ConnectivityStatus.OutputKind kind) => kind switch
