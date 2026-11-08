@@ -39,5 +39,6 @@ public readonly record struct HostStatusVisual(HostStatusColor Color, string Sym
         LocalHostStatusKind.OnUsb => new(HostStatusColor.Blue, "◆"),
         LocalHostStatusKind.CannotDetermine => new(HostStatusColor.Gray, "○"),
         LocalHostStatusKind.Disconnected => new(HostStatusColor.Red, "✕"),
+        _ => new(HostStatusColor.Gray, "○"),
     };
 }

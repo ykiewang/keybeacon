@@ -156,6 +156,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         HostStatusColor.Blue => DotBlue,
         HostStatusColor.Gray => DotGray,
         HostStatusColor.Red => DotRed,
+        _ => DotGray,
     };
 
     private static Brush FrozenBrush(byte r, byte g, byte b)
@@ -430,6 +431,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             LocalHostStatusKind.OnUsb => _loc.Get("HostLink_OnUsb"),
             LocalHostStatusKind.CannotDetermine => _loc.Get("HostLink_CannotDetermine"),
             LocalHostStatusKind.Disconnected => _loc.Get("HostLink_Disconnected"),
+            _ => string.Empty,
         };
     }
 
