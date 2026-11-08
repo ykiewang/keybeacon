@@ -211,6 +211,16 @@ Package a distributable bundle locally:
 build — no file copying, no `include()`/`rsource`. The two-step setup is documented in the
 module's [GETTING-STARTED.md](https://github.com/ykiewang/zmk-keybeacon/blob/main/GETTING-STARTED.md).
 
+**Want a complete, working example?** [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem)
+is a full ZMK config that wires KeyBeacon into a split keyboard — flash it to a Totem to use it
+directly, or read it to see exactly how the module is plugged in:
+[`config/west.yml`](https://github.com/ykiewang/zmk-config-totem/blob/master/config/west.yml) pins
+the module to a release tag, and
+[`config/boards/shields/totem/totem_left.conf`](https://github.com/ykiewang/zmk-config-totem/blob/master/config/boards/shields/totem/totem_left.conf)
+enables it on the central half with the KBP 1.1 / 1.2 sub-options. Its
+[readme](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble)
+walks through the integration.
+
 **Any other firmware, or implementing from scratch?** Read [`protocol/README.md`](protocol/README.md)
 (the standard) and [`conformance/CONFORMANCE.md`](conformance/CONFORMANCE.md) (what to implement),
 then run the self-test tool:
@@ -411,6 +421,14 @@ swift test                    # 纯逻辑单元测试
 该模块(锁定到发布 tag),并在 central 构建上设置 `CONFIG_ZMK_KEYBEACON=y` 即可 —— 无需复制文件、无需
 `include()`/`rsource`。两步接入详见模块的
 [GETTING-STARTED.md](https://github.com/ykiewang/zmk-keybeacon/blob/main/GETTING-STARTED.md)。
+
+**想要一个可直接运行的完整示例?** [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem)
+是一份完整的 ZMK 配置,把 KeyBeacon 接入了一把分体键盘 —— 刷进 Totem 即可直接使用,也可以直接阅读它、
+看模块究竟是怎么接进去的:[`config/west.yml`](https://github.com/ykiewang/zmk-config-totem/blob/master/config/west.yml)
+把模块锁定到发布 tag,[`config/boards/shields/totem/totem_left.conf`](https://github.com/ykiewang/zmk-config-totem/blob/master/config/boards/shields/totem/totem_left.conf)
+在 central 半启用它(含 KBP 1.1 / 1.2 子选项)。仓库
+[readme](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble)
+里有完整的接入说明。
 
 **其他固件,或从零实现?** 阅读 [`protocol/README.md`](protocol/README.md)(标准)与
 [`conformance/CONFORMANCE.md`](conformance/CONFORMANCE.md)(需要实现什么),然后运行自测工具:
