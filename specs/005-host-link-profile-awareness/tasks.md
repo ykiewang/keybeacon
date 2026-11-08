@@ -97,16 +97,16 @@ description: "Task list for 005-host-link-profile-awareness"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T028 [P] [US2] macOS 重读/重学单测 in `app/macos/Tests/BleWidgetTests/HostLinkProfileAwarenessTests.swift`：模拟 slot 由 N→M，验证缓存刷新与 `learnedAt` 更新
-- [ ] T029 [P] [US2] Windows 重读/重学单测 in `app/windows/tests/KeyBeacon.Core.Tests/HostContextStatusTests.cs`，用例对齐 macOS
+- [X] T028 [P] [US2] macOS 重读/重学单测 in `app/macos/Tests/BleWidgetTests/HostLinkProfileAwarenessTests.swift`：模拟 slot 由 N→M，验证缓存刷新与 `learnedAt` 更新
+- [X] T029 [P] [US2] Windows 重读/重学单测 in `app/windows/tests/KeyBeacon.Core.Tests/HostContextStatusTests.cs`，用例对齐 macOS
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] macOS 新增公开 `readLinkSlot()` 于 `app/macos/Sources/BleWidget/BLEClient.swift`（`peripheral?.readValue(for: linkSlotCharacteristic)`），供重读（依赖 T018）
-- [ ] T031 [US2] macOS 接入重读时机于 `BLEClient.swift`：reconnect、AA2 `profile_open` 1→0、AA2 notify 中 `active_index` 变化、60s 兜底 timer（依赖 T030）
-- [ ] T032 [US2] Windows 接入重读时机于 `app/windows/src/KeyBeacon.App/Ble/KeyboardMonitor.cs`：`ReconnectAsync`(:100-104)/`OnConnectionStatusChanged`(:386-396)、profile_open 1→0、active 变化、60s 兜底（复用 `ReadAsync`，依赖 T019）
-- [ ] T033 [P] [US2] 两端 `LinkSlot` 会话级缓存 + `learnedAt`；重连清缓存重学（macOS `BLEClient.swift`、Windows `KeyboardMonitor.cs`）
-- [ ] T034 [P] [US2] 两端 `hostlink.read_back_slot` 信息级诊断（读回刷新且与缓存不同时各一条）：macOS `DiagnosticsLogger.swift`、Windows `DiagnosticsLogger.cs`
+- [X] T030 [US2] macOS 新增公开 `readLinkSlot()` 于 `app/macos/Sources/BleWidget/BLEClient.swift`（`peripheral?.readValue(for: linkSlotCharacteristic)`），供重读（依赖 T018）
+- [X] T031 [US2] macOS 接入重读时机于 `BLEClient.swift`：reconnect、AA2 `profile_open` 1→0、AA2 notify 中 `active_index` 变化、60s 兜底 timer（依赖 T030）
+- [X] T032 [US2] Windows 接入重读时机于 `app/windows/src/KeyBeacon.App/Ble/KeyboardMonitor.cs`：`ReconnectAsync`(:100-104)/`OnConnectionStatusChanged`(:386-396)、profile_open 1→0、active 变化、60s 兜底（复用 `ReadAsync`，依赖 T019）
+- [X] T033 [P] [US2] 两端 `LinkSlot` 会话级缓存 + `learnedAt`；重连清缓存重学（macOS `BLEClient.swift`、Windows `KeyboardMonitor.cs`）
+- [X] T034 [P] [US2] 两端 `hostlink.read_back_slot` 信息级诊断（读回刷新且与缓存不同时各一条）：macOS `DiagnosticsLogger.swift`、Windows `DiagnosticsLogger.cs`
 
 **Checkpoint**: US2 可独立验收 —— 零配置首屏正确（SC-002）、重新配对自动纠正
 
@@ -120,13 +120,13 @@ description: "Task list for 005-host-link-profile-awareness"
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T035 [P] [US3] 两端「未发现 AA4 → cannotDetermine、不臆造」单测（macOS/Windows 测试文件各一用例，hasAA4=false 分支）
-- [ ] T036 [P] [US3] `conformance/tests/` 增向后兼容向量：老固件（无 AA4，SKIP C13/C14 不失败）、AA4 存在但无 AA2（`discovery.anomaly`）
+- [X] T035 [P] [US3] 两端「未发现 AA4 → cannotDetermine、不臆造」单测（macOS/Windows 测试文件各一用例，hasAA4=false 分支）
+- [X] T036 [P] [US3] `conformance/tests/` 增向后兼容向量：老固件（无 AA4，SKIP C13/C14 不失败）、AA4 存在但无 AA2（`discovery.anomaly`）
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] 两端发现流程：有 AA4 无 AA2 → 发 `discovery.anomaly` 并按不可用处理（macOS `BLEClient.swift`、Windows `KeyboardMonitor.cs`）
-- [ ] T038 [US3] 回归确认：既有 `ConnectivityStatus`(macOS `.swift`/Windows `.cs`) 与 `CapabilityMatrix` **零改动**；重跑 T001 基线用例保持全绿（SC-004）
+- [X] T037 [US3] 两端发现流程：有 AA4 无 AA2 → 发 `discovery.anomaly` 并按不可用处理（macOS `BLEClient.swift`、Windows `KeyboardMonitor.cs`）
+- [X] T038 [US3] 回归确认：既有 `ConnectivityStatus`(macOS `.swift`/Windows `.cs`) 与 `CapabilityMatrix` **零改动**；重跑 T001 基线用例保持全绿（SC-004）
 
 **Checkpoint**: 三个 US 均可独立验收；兼容矩阵（quickstart D）通过
 
@@ -136,11 +136,13 @@ description: "Task list for 005-host-link-profile-awareness"
 
 **Purpose**: 跨故事验证与端到端
 
-- [ ] T039 [P] 运行 `python3 conformance/conformance_tool.py` 与 `python3 -m pytest conformance/tests/ -q`，确认 C1–C14 无新失败（SC-005）
-- [ ] T040 [P] 两端完整单测绿：`swift test`（macOS）、`dotnet test`（Windows），覆盖率包含五态穷举
-- [ ] T041 跨平台 parity 复核（宪法 §III）：逐条对比两端五态文案与行为、诊断事件名一致
+- [X] T039 [P] 运行 `python3 conformance/conformance_tool.py` 与 `python3 -m pytest conformance/tests/ -q`，确认 C1–C14 无新失败（SC-005）
+- [X] T040 [P] 两端完整单测绿：`swift test`（macOS）、`dotnet test`（Windows），覆盖率包含五态穷举
+- [X] T041 跨平台 parity 复核（宪法 §III）：逐条对比两端五态文案与行为、诊断事件名一致
 - [ ] T042 端到端真机验收（需 `zmk-keybeacon` 1.2 固件就绪）：按 quickstart S1–S6 + 降级负测矩阵 C 表，参考键盘 + 第二台电脑，确认 ≥20 次切换无卡滞（SC-001/SC-003）
-- [ ] T043 [P] 若根 `README.md` 提及协议版本/能力，按 §VI 双语更新 1.2
+  - ⏸ **阻塞于硬件**：需真机 + 第二台电脑，无法在 CI/开发机完成。
+  - 诊断背景：上线反馈的「切 profile 回来后未连接/无法确定/P5」已用 CoreBluetooth 探针直读证实**固件侧正确**（AA4=slot1 稳定），根因为 App 仅在 discovery 读一次 AA4、链路不断线时不重读（首连 slot 未解析/重配对后变 stale）。本次 US2（T030–T034）补齐的「active 变化 / open→assigned / 60s 兜底 / reconnect 重读 AA4 + 会话缓存」即针对该根因；重启 App 可恢复的现象已侧面验证修复方向。真机回归请覆盖：首连 slot=0→解析、P1↔P5 往返、重配对到新 slot。
+- [X] T043 [P] 若根 `README.md` 提及协议版本/能力，按 §VI 双语更新 1.2
 
 ---
 

@@ -62,6 +62,7 @@ public static class DiagnosticEvents
     // per-link host context (spec 005 / KBP 1.2)
     public const string HostLinkUnresolved = "hostlink.unresolved";
     public const string HostLinkCannotDetermine = "hostlink.cannot_determine";
+    public const string HostLinkReadBackSlot = "hostlink.read_back_slot";
 
     // lifecycle / diagnostics
     public const string AppStarted = "app.started";

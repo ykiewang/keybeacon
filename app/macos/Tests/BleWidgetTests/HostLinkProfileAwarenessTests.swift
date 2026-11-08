@@ -269,4 +269,129 @@ final class HostLinkProfileAwarenessTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - T028 [US2]: LinkSlotCache re-read / re-learn
+
+    func testCache_initialLearn_setsSlotAndLearnedAt_noReadBack() {
+        var cache = LinkSlotCache()
+        XCTAssertNil(cache.slot)
+        XCTAssertNil(cache.learnedAt)
+
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let readBack = cache.learn(LinkSlot(slot: 1), at: t0)
+
+        // First learn is not a "read-back change" → no diagnostic.
+        XCTAssertFalse(readBack)
+        XCTAssertEqual(cache.slot?.slot, 1)
+        XCTAssertEqual(cache.learnedAt, t0)
+    }
+
+    func testCache_reReadDifferentSlot_N_to_M_refreshesAndSignalsReadBack() {
+        var cache = LinkSlotCache()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = Date(timeIntervalSince1970: 2_000)
+
+        _ = cache.learn(LinkSlot(slot: 2), at: t0) // N = 2 (initial)
+        let readBack = cache.learn(LinkSlot(slot: 5), at: t1) // M = 5 (re-pair)
+
+        XCTAssertTrue(readBack, "slot N→M must report a read-back change (T034)")
+        XCTAssertEqual(cache.slot?.slot, 5)
+        XCTAssertEqual(cache.learnedAt, t1, "learnedAt must advance on re-read")
+    }
+
+    func testCache_reReadSameSlot_refreshesLearnedAt_noReadBack() {
+        var cache = LinkSlotCache()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = Date(timeIntervalSince1970: 2_000)
+
+        _ = cache.learn(LinkSlot(slot: 3), at: t0)
+        let readBack = cache.learn(LinkSlot(slot: 3), at: t1)
+
+        // Same slot → no read-back diagnostic, but the fallback re-read still
+        // refreshes the freshness stamp.
+        XCTAssertFalse(readBack)
+        XCTAssertEqual(cache.slot?.slot, 3)
+        XCTAssertEqual(cache.learnedAt, t1)
+    }
+
+    func testCache_unresolvedThenResolved_zeroToSlot_signalsReadBack() {
+        // The real-world bug: slot=0 at connect time (peer not yet matched to a
+        // bond), later resolves to a concrete slot on a fallback re-read.
+        var cache = LinkSlotCache()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = Date(timeIntervalSince1970: 1_060)
+
+        _ = cache.learn(LinkSlot(slot: 0), at: t0)
+        let readBack = cache.learn(LinkSlot(slot: 1), at: t1)
+
+        XCTAssertTrue(readBack)
+        XCTAssertEqual(cache.slot?.slot, 1)
+    }
+
+    func testCache_nilRead_retainsPreviousSlot_noReadBack() {
+        var cache = LinkSlotCache()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        _ = cache.learn(LinkSlot(slot: 4), at: t0)
+
+        // An empty/failed read (parse → nil) MUST NOT clobber the known slot.
+        let readBack = cache.learn(nil, at: Date(timeIntervalSince1970: 2_000))
+
+        XCTAssertFalse(readBack)
+        XCTAssertEqual(cache.slot?.slot, 4)
+        XCTAssertEqual(cache.learnedAt, t0, "learnedAt unchanged when read yields nil")
+    }
+
+    func testCache_reset_clearsSlotAndLearnedAt() {
+        var cache = LinkSlotCache()
+        _ = cache.learn(LinkSlot(slot: 2), at: Date())
+        cache.reset()
+
+        XCTAssertNil(cache.slot)
+        XCTAssertNil(cache.learnedAt)
+
+        // After reset, the next learn is an initial learn again (no read-back).
+        let readBack = cache.learn(LinkSlot(slot: 2), at: Date())
+        XCTAssertFalse(readBack)
+    }
+
+    // MARK: - T035 [US3]: old firmware (no AA4) never fabricates in-use/elsewhere
+
+    func testDerive_noAA4_neverFabricates_exhaustive() {
+        // US3: a new app against old firmware (AA4 absent) MUST degrade to
+        // cannotDetermine for every active/local/output combination — it must
+        // never claim inUseHere or activeElsewhere without AA4 (FR-008, C-L2).
+        // The only states allowed without AA4 are disconnected and onUsb.
+        for active in UInt8(0)...4 {
+            for local in UInt8(0)...4 {
+                let status = deriveLocalHostStatus(
+                    hasAA4: false,
+                    connected: true,
+                    capability: cap(hasOutputEndpoint: false),
+                    activeProfile: profile(index: active),
+                    localSlot: LinkSlot(slot: local),
+                    output: .ble
+                )
+                XCTAssertEqual(
+                    status, .cannotDetermine,
+                    "no AA4 must never fabricate (active=\(active) local=\(local))"
+                )
+            }
+        }
+    }
+
+    func testDerive_noAA4_stillHonoursDisconnectedAndUsb() {
+        // Disconnected and onUsb do not depend on AA4 and still win.
+        XCTAssertEqual(
+            deriveLocalHostStatus(
+                hasAA4: false, connected: false, capability: cap(),
+                activeProfile: profile(index: 1), localSlot: nil, output: .ble
+            ), .disconnected
+        )
+        XCTAssertEqual(
+            deriveLocalHostStatus(
+                hasAA4: false, connected: true, capability: cap(hasOutputEndpoint: true),
+                activeProfile: profile(index: 1), localSlot: nil, output: .usb
+            ), .onUsb
+        )
+    }
 }

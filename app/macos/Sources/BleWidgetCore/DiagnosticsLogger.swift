@@ -166,5 +166,17 @@ public enum DiagnosticsLogger {
         public func hostLinkCannotDetermine(missing: String) {
             log.notice("hostlink.cannot_determine missing=\(missing, privacy: .public)")
         }
+
+        /// Spec 005 / US2 (T034): a Link-slot re-read returned a slot that
+        /// differs from the previously-cached value — the host re-learned this
+        /// connection's slot (e.g. the keyboard was re-paired, or the peer
+        /// address resolved to a bond after connect). Info level; fires only on
+        /// a genuine change, not the initial read.
+        public func hostLinkReadBackSlot(from: UInt8, to: UInt8) {
+            log.info("""
+                hostlink.read_back_slot from=\(from, privacy: .public) \
+                to=\(to, privacy: .public)
+                """)
+        }
     }
 }

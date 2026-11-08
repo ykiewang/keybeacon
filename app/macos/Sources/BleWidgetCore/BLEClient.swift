@@ -96,7 +96,10 @@ public final class BLEClient: NSObject {
     // status (spec 005 / KBP 1.2) can be re-derived whenever either side
     // changes. Cleared on disconnect so a stale in-use claim never persists.
     private var latestConnectivity: ConnectivityStatus?
-    private var latestLinkSlot: LinkSlot?
+    // Session-scoped AA4 cache + learnedAt (US2 / T033). AA4 is READ-only, so
+    // the slot is re-read on reconnect, on active-profile change, when an open
+    // profile closes, and on a fallback timer — then re-learned here.
+    private var linkSlotCache = LinkSlotCache()
 
     // Last per-link status pushed to the delegate, so degrade diagnostics
     // (hostlink.unresolved / hostlink.cannot_determine) fire exactly once per
@@ -114,6 +117,12 @@ public final class BLEClient: NSObject {
 
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 3
+
+    // US2 (T031): AA4 has no NOTIFY, so a low-frequency fallback re-read keeps
+    // the per-link slot fresh even if every event-driven trigger is missed
+    // (e.g. a slot that was unresolved at connect time resolves later).
+    private var linkReadTimer: Timer?
+    private let linkReadFallbackInterval: TimeInterval = 60
 
     public override init() {
         super.init()
@@ -137,7 +146,7 @@ public final class BLEClient: NSObject {
             linkSlotCharacteristic = nil
             cachedCapability = nil
             latestConnectivity = nil
-            latestLinkSlot = nil
+            linkSlotCache.reset()
             lastHostStatus = nil
             activeKeyboard = nil
         }
@@ -253,6 +262,19 @@ public final class BLEClient: NSObject {
         }
     }
 
+    /// US2 (T031): schedule the low-frequency AA4 fallback re-read. AA4 has no
+    /// NOTIFY, so this guards against a slot that was unresolved at connect time
+    /// resolving later with no AA2 activity to trigger an event-driven re-read.
+    private func startLinkReadFallback() {
+        linkReadTimer?.invalidate()
+        guard linkSlotCharacteristic != nil else { return }
+        linkReadTimer = Timer.scheduledTimer(
+            withTimeInterval: linkReadFallbackInterval, repeats: true
+        ) { [weak self] _ in
+            self?.readLinkSlot()
+        }
+    }
+
     private func cancelScan() {
         if let p = probeTarget {
             central.cancelPeripheralConnection(p)
@@ -278,9 +300,11 @@ public final class BLEClient: NSObject {
         linkSlotCharacteristic = nil
         cachedCapability = nil
         latestConnectivity = nil
-        latestLinkSlot = nil
+        linkSlotCache.reset()
         lastHostStatus = nil
         activeKeyboard = nil
+        linkReadTimer?.invalidate()
+        linkReadTimer = nil
         delegate?.bleClient(self, didChangeState: .notConnected)
         delegate?.bleClient(self, didChangeActiveKeyboard: nil)
         // Per-link host row hides on disconnect (the global panel already shows
@@ -303,10 +327,12 @@ public final class BLEClient: NSObject {
         linkSlotCharacteristic = nil
         cachedCapability = nil
         latestConnectivity = nil
-        latestLinkSlot = nil
+        linkSlotCache.reset()
         lastHostStatus = nil
         activeKeyboard = nil
         reconnectTimer?.invalidate()
+        linkReadTimer?.invalidate()
+        linkReadTimer = nil
     }
 
     // MARK: - KBP 1.1 handlers
@@ -369,8 +395,20 @@ public final class BLEClient: NSObject {
 
         // Cache the AA2 snapshot and re-derive the per-link host status (spec
         // 005): active profile / output / connected all feed the five-state.
+        let previous = latestConnectivity
         latestConnectivity = status
         recomputeHostStatus(connected: true)
+
+        // US2 (T031): AA4 is READ-only — re-read it when the active profile
+        // changed, or when an open/unassigned profile just became assigned.
+        // This re-learns a slot that was unresolved at connect time (peer
+        // address not yet matched to a bond) or after a re-pair, satisfying the
+        // ≤1 s refresh requirement (FR-006) without a reconnect.
+        let activeChanged = previous?.profile.index != status.profile.index
+        let openClosed = (previous?.profile.isOpen == true) && !status.profile.isOpen
+        if activeChanged || openClosed {
+            readLinkSlot()
+        }
     }
 
     /// Decode a Battery payload. Requires that `cachedCapability.isSplit` is
@@ -405,11 +443,29 @@ public final class BLEClient: NSObject {
 
     // MARK: - KBP 1.2 handler (per-link host status, spec 005)
 
+    /// Re-read the AA4 Link-slot characteristic on demand (US2 / T030). AA4 has
+    /// no NOTIFY, so every refresh is an explicit READ. No-op when the keyboard
+    /// exposes no AA4 or the link is down. The response arrives asynchronously
+    /// in `didUpdateValueFor` → `handleLinkSlotRead`.
+    public func readLinkSlot() {
+        guard let peripheral, let linkSlotCharacteristic else { return }
+        peripheral.readValue(for: linkSlotCharacteristic)
+    }
+
     /// Decode an AA4 READ (Link-slot). Because AA4 is READ-only, the value is
     /// always the slot for *this* BLE connection — no READ/NOTIFY frame
-    /// disambiguation needed (contract CF-2). Diagnostics are wired in T027.
+    /// disambiguation needed (contract CF-2). The parsed slot is cached with a
+    /// `learnedAt` stamp (T033); a read-back that differs from the previously
+    /// cached slot emits one `hostlink.read_back_slot` diagnostic (T034).
     private func handleLinkSlotRead(_ data: Data) {
-        latestLinkSlot = LinkSlot.parse(from: data)
+        let parsed = LinkSlot.parse(from: data)
+        let previousSlot = linkSlotCache.slot?.slot
+        let changed = linkSlotCache.learn(parsed, at: Date())
+        if changed, let parsed {
+            DiagnosticsLogger.connection.hostLinkReadBackSlot(
+                from: previousSlot ?? 0, to: parsed.slot
+            )
+        }
         recomputeHostStatus(connected: true)
     }
 
@@ -433,7 +489,7 @@ public final class BLEClient: NSObject {
             connected: true,
             capability: cachedCapability,
             activeProfile: latestConnectivity?.profile,
-            localSlot: latestLinkSlot,
+            localSlot: linkSlotCache.slot,
             output: latestConnectivity?.output
         )
         // Emit degrade diagnostics only on transition into the degraded state
@@ -451,14 +507,14 @@ public final class BLEClient: NSObject {
     /// (`hostlink.cannot_determine`, with the missing input category).
     private func emitHostStatusDiagnostics(for status: LocalHostStatus) {
         guard status == .cannotDetermine else { return }
-        if let slot = latestLinkSlot, slot.slot == 0 {
+        if let slot = linkSlotCache.slot, slot.slot == 0 {
             DiagnosticsLogger.connection.hostLinkUnresolved()
             return
         }
         let missing: String
         if latestConnectivity == nil {
             missing = "connectivity_unknown"
-        } else if latestLinkSlot == nil {
+        } else if linkSlotCache.slot == nil {
             missing = "link_slot_unread"
         } else if !(cachedCapability?.hasProfile ?? false) {
             missing = "no_profile_capability"
@@ -643,6 +699,17 @@ extension BLEClient: CBPeripheralDelegate {
         linkSlotCharacteristic = linkChar
         if let linkChar = linkChar {
             peripheral.readValue(for: linkChar)
+            // US2 (T031): low-frequency fallback re-read keeps the slot fresh
+            // even if every event-driven trigger is missed.
+            startLinkReadFallback()
+            // US3 (T037): AA4 without AA2 is an anomalous wire — the per-link
+            // status has no active-profile input to compare against, so it can
+            // only ever be `.cannotDetermine`. Surface it once for diagnosis.
+            if connChar == nil {
+                DiagnosticsLogger.connection.discoveryAnomaly(
+                    reason: "AA440AA4-… present but AA440AA2-… missing"
+                )
+            }
         }
 
         let keyboard = CompatibleKeyboard(

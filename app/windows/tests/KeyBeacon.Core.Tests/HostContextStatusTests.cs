@@ -259,4 +259,122 @@ public class HostContextStatusTests
             }
         }
     }
+
+    // --- T029 [US2]: LinkSlotCache re-read / re-learn (parity with macOS) ---
+
+    private static readonly DateTimeOffset T0 = DateTimeOffset.FromUnixTimeSeconds(1_000);
+    private static readonly DateTimeOffset T1 = DateTimeOffset.FromUnixTimeSeconds(2_000);
+
+    [Fact]
+    public void Cache_InitialLearn_SetsSlotAndLearnedAt_NoReadBack()
+    {
+        var cache = new LinkSlotCache();
+        Assert.Null(cache.Slot);
+        Assert.Null(cache.LearnedAt);
+
+        var readBack = cache.Learn(new LinkSlot(1, false, 0), T0);
+
+        Assert.False(readBack); // first learn is not a read-back change
+        Assert.Equal(1, cache.Slot!.Slot);
+        Assert.Equal(T0, cache.LearnedAt);
+    }
+
+    [Fact]
+    public void Cache_ReReadDifferentSlot_N_To_M_RefreshesAndSignalsReadBack()
+    {
+        var cache = new LinkSlotCache();
+        cache.Learn(new LinkSlot(2, false, 0), T0); // N = 2
+        var readBack = cache.Learn(new LinkSlot(5, false, 0), T1); // M = 5
+
+        Assert.True(readBack); // slot N→M reports a read-back change (T034)
+        Assert.Equal(5, cache.Slot!.Slot);
+        Assert.Equal(T1, cache.LearnedAt); // learnedAt advances on re-read
+    }
+
+    [Fact]
+    public void Cache_ReReadSameSlot_RefreshesLearnedAt_NoReadBack()
+    {
+        var cache = new LinkSlotCache();
+        cache.Learn(new LinkSlot(3, false, 0), T0);
+        var readBack = cache.Learn(new LinkSlot(3, false, 0), T1);
+
+        Assert.False(readBack);
+        Assert.Equal(3, cache.Slot!.Slot);
+        Assert.Equal(T1, cache.LearnedAt);
+    }
+
+    [Fact]
+    public void Cache_UnresolvedThenResolved_ZeroToSlot_SignalsReadBack()
+    {
+        // slot=0 at connect time (peer not yet matched to a bond), resolves
+        // later on a fallback re-read.
+        var cache = new LinkSlotCache();
+        cache.Learn(new LinkSlot(0, false, 0), T0);
+        var readBack = cache.Learn(new LinkSlot(1, false, 0), T1);
+
+        Assert.True(readBack);
+        Assert.Equal(1, cache.Slot!.Slot);
+    }
+
+    [Fact]
+    public void Cache_NullRead_RetainsPreviousSlot_NoReadBack()
+    {
+        var cache = new LinkSlotCache();
+        cache.Learn(new LinkSlot(4, false, 0), T0);
+
+        var readBack = cache.Learn(null, T1); // empty/failed read
+
+        Assert.False(readBack);
+        Assert.Equal(4, cache.Slot!.Slot);
+        Assert.Equal(T0, cache.LearnedAt); // unchanged when read yields null
+    }
+
+    [Fact]
+    public void Cache_Reset_ClearsSlotAndLearnedAt()
+    {
+        var cache = new LinkSlotCache();
+        cache.Learn(new LinkSlot(2, false, 0), T0);
+        cache.Reset();
+
+        Assert.Null(cache.Slot);
+        Assert.Null(cache.LearnedAt);
+
+        var readBack = cache.Learn(new LinkSlot(2, false, 0), T1);
+        Assert.False(readBack); // initial learn again after reset
+    }
+
+    // --- T035 [US3]: old firmware (no AA4) never fabricates (parity with macOS) ---
+
+    [Fact]
+    public void Derive_NoAA4_NeverFabricates_Exhaustive()
+    {
+        // A new app against old firmware (AA4 absent) MUST degrade to
+        // CannotDetermine for every active/local/output combination — never
+        // InUseHere / ActiveElsewhere without AA4 (FR-008, C-L2).
+        for (byte active = 0; active <= 4; active++)
+        {
+            for (byte local = 0; local <= 4; local++)
+            {
+                var status = HostContextStatus.DeriveLocalHostStatus(
+                    hasAA4: false, connected: true,
+                    capability: Cap(hasOutputEndpoint: false),
+                    activeProfile: Profile(active),
+                    localSlot: new LinkSlot(local, false, 0), output: Ble);
+                Assert.Equal(LocalHostStatus.CannotDetermine, status);
+            }
+        }
+    }
+
+    [Fact]
+    public void Derive_NoAA4_StillHonoursDisconnectedAndUsb()
+    {
+        Assert.Equal(LocalHostStatus.Disconnected,
+            HostContextStatus.DeriveLocalHostStatus(
+                hasAA4: false, connected: false, capability: Cap(),
+                activeProfile: Profile(1), localSlot: null, output: Ble));
+        Assert.Equal(LocalHostStatus.OnUsb,
+            HostContextStatus.DeriveLocalHostStatus(
+                hasAA4: false, connected: true, capability: Cap(hasOutputEndpoint: true),
+                activeProfile: Profile(1), localSlot: null, output: Usb));
+    }
 }

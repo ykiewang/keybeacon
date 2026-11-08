@@ -50,10 +50,19 @@ public sealed class KeyboardMonitor : IAsyncDisposable
     private KeyboardStatus? _lastStatus;
     private ConnectivityStatus? _lastConnectivity;
     private BatteryStatus? _lastBattery;
-    private LinkSlot? _lastLinkSlot;
+    // Session-scoped AA4 cache + learnedAt (US2 / T033). AA4 is READ-only, so
+    // the slot is re-read on reconnect, on active-profile change, when an open
+    // profile closes, and on a fallback timer — then re-learned here. Parity
+    // with the macOS BLEClient.linkSlotCache.
+    private readonly LinkSlotCache _linkSlotCache = new();
     private CapabilityMatrix? _capability;
     private byte[]? _pendingBattery; // cached until capability (isSplit) is known
     private byte _lastCapabilityByte;
+
+    // US2 (T031): AA4 has no NOTIFY, so a low-frequency fallback re-read keeps
+    // the per-link slot fresh even if every event-driven trigger is missed.
+    private Timer? _linkReadTimer;
+    private static readonly TimeSpan LinkReadFallbackInterval = TimeSpan.FromSeconds(60);
 
     // Last per-link status emitted, so degrade diagnostics
     // (hostlink.unresolved / hostlink.cannot_determine) fire once per
@@ -242,6 +251,22 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             {
                 var linkRaw = await ReadAsync(_linkSlotChar);
                 if (linkRaw is not null) HandleLinkSlot(linkRaw);
+
+                // US2 (T031): low-frequency fallback re-read keeps the slot
+                // fresh even if every event-driven trigger is missed (e.g. a
+                // slot unresolved at connect time resolves later).
+                _linkReadTimer = new Timer(_ => _ = RereadLinkSlotAsync(), null,
+                    LinkReadFallbackInterval, LinkReadFallbackInterval);
+
+                // US3 (T037): AA4 without AA2 is an anomalous wire — the per-link
+                // status has no active-profile input to compare against, so it
+                // can only ever be CannotDetermine. Surface it once.
+                if (_connChar is null)
+                {
+                    _connLog.LogWarning("{Event} reason={Reason}",
+                        DiagnosticEvents.DiscoveryAnomaly,
+                        "AA4 present but AA2 missing");
+                }
             }
 
             _connLog.LogInformation("{Event} connected={Connected} reason_raw=0x00",
@@ -351,6 +376,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
 
         _capability = cap;
         _lastCapabilityByte = cap.ToByte();
+        var previous = _lastConnectivity;
         _lastConnectivity = parsed;
         _staleness.RecordNotify(FieldKeys.Connectivity);
 
@@ -361,6 +387,19 @@ public sealed class KeyboardMonitor : IAsyncDisposable
         }
 
         PublishConnected();
+
+        // US2 (T032): AA4 is READ-only — re-read it when the active profile
+        // changed, or when an open/unassigned profile just became assigned.
+        // This re-learns a slot that was unresolved at connect time (peer
+        // address not yet matched to a bond) or after a re-pair, satisfying the
+        // ≤1 s refresh requirement (FR-006) without a reconnect. Parity with the
+        // macOS handleConnectivityUpdate re-read trigger.
+        if (_linkSlotChar is not null)
+        {
+            bool activeChanged = previous?.Profile.Index != parsed.Profile.Index;
+            bool openClosed = previous?.Profile.IsOpen == true && !parsed.Profile.IsOpen;
+            if (activeChanged || openClosed) _ = RereadLinkSlotAsync();
+        }
     }
 
     private void HandleBattery(byte[] value)
@@ -402,9 +441,34 @@ public sealed class KeyboardMonitor : IAsyncDisposable
     private void HandleLinkSlot(byte[] value)
     {
         // AA4 is READ-only; the value is always THIS connection's slot — no
-        // READ/NOTIFY frame disambiguation needed (CF-2). Diagnostics wired in T027.
-        _lastLinkSlot = LinkSlot.Parse(value);
+        // READ/NOTIFY frame disambiguation needed (CF-2). The parsed slot is
+        // cached with a learnedAt stamp (T033); a read-back that differs from
+        // the previously cached slot emits one hostlink.read_back_slot
+        // diagnostic (T034). Parity with macOS handleLinkSlotRead.
+        var parsed = LinkSlot.Parse(value);
+        var previousSlot = _linkSlotCache.Slot?.Slot;
+        var changed = _linkSlotCache.Learn(parsed, DateTimeOffset.Now);
+        if (changed && parsed is not null)
+        {
+            _connLog.LogInformation("{Event} from={From} to={To}",
+                DiagnosticEvents.HostLinkReadBackSlot, previousSlot ?? 0, parsed.Slot);
+        }
         PublishConnected();
+    }
+
+    /// <summary>
+    /// US2 (T030/T032): re-read the AA4 Link-slot characteristic on demand. AA4
+    /// has no NOTIFY, so every refresh is an explicit READ. No-op when the
+    /// keyboard exposes no AA4. Parity with macOS BLEClient.readLinkSlot.
+    /// </summary>
+    private async Task RereadLinkSlotAsync()
+    {
+        var ch = _linkSlotChar;
+        if (ch is null) return;
+        var raw = await ReadAsync(ch);
+        // Parity with the notify handlers (OnConnectivityChanged etc.): decode
+        // on the current thread; PublishConnected marshals the UI event.
+        if (raw is not null) HandleLinkSlot(raw);
     }
 
     // ---- connection / staleness ----
@@ -448,7 +512,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
                 connected: true,
                 capability: _capability,
                 activeProfile: _lastConnectivity?.Profile,
-                localSlot: _lastLinkSlot,
+                localSlot: _linkSlotCache.Slot,
                 output: _lastConnectivity?.Output);
 
         // Degrade diagnostics fire exactly once per transition (FR-013).
@@ -484,7 +548,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
     {
         if (status is not { Kind: LocalHostStatusKind.CannotDetermine }) return;
 
-        if (_lastLinkSlot is { Slot: 0 })
+        if (_linkSlotCache.Slot is { Slot: 0 })
         {
             _connLog.LogInformation("{Event} reason={Reason}",
                 DiagnosticEvents.HostLinkUnresolved, "firmware_returned_slot_0");
@@ -493,7 +557,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
 
         string missing =
             _lastConnectivity is null ? "connectivity_unknown"
-            : _lastLinkSlot is null ? "link_slot_unread"
+            : _linkSlotCache.Slot is null ? "link_slot_unread"
             : _capability is not { HasProfile: true } ? "no_profile_capability"
             : _lastConnectivity.Profile.IsOpen ? "profile_open"
             : _lastConnectivity.Profile.Index == 0 ? "active_index_zero"
@@ -549,8 +613,11 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             if (_connChar is not null) _connChar.ValueChanged -= OnConnectivityChanged;
             if (_batteryChar is not null) _batteryChar.ValueChanged -= OnBatteryChanged;
             _statusChar = _connChar = _batteryChar = null;
-            // AA4 has no ValueChanged subscription (READ-only); just drop the ref.
+            // AA4 has no ValueChanged subscription (READ-only); drop the ref and
+            // stop the fallback re-read timer (US2 / T031).
             _linkSlotChar = null;
+            _linkReadTimer?.Dispose();
+            _linkReadTimer = null;
 
             if (_device is not null)
             {
@@ -562,7 +629,7 @@ public sealed class KeyboardMonitor : IAsyncDisposable
             _lastStatus = null;
             _lastConnectivity = null;
             _lastBattery = null;
-            _lastLinkSlot = null;
+            _linkSlotCache.Reset();
             _capability = null;
             _pendingBattery = null;
             // Reset per-link transition tracking so a fresh connection re-emits
