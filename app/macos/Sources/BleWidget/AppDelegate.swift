@@ -308,4 +308,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {
         panel.update(battery: status)
     }
+
+    func bleClient(_ client: BLEClient, didUpdateHostStatus status: LocalHostStatus?) {
+        panel.update(hostStatus: status)
+    }
 }

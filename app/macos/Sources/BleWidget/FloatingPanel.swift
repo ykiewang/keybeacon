@@ -43,6 +43,16 @@ final class FloatingPanel: NSPanel {
     private let hostStaleLabel = NSTextField(labelWithString: "")
     private let hostRow = NSStackView()
 
+    // KBP 1.2 per-link "this computer" status row (spec 005). Deliberately
+    // distinct from the global host-connection row above: it answers the
+    // higher-level "in use *here* vs *elsewhere*" question that only a
+    // per-connection AA4 READ can honestly resolve. Hidden unless the active
+    // keyboard exposes AA4 (old firmware → no new UI, CF-8).
+    private let localHostDot = FloatingPanel.makeDot(diameter: 10)
+    private let localHostLabel = NSTextField(labelWithString: "")
+    private let localHostRow = NSStackView()
+    private var cachedHostStatus: LocalHostStatus?
+
     private let profileCaption = NSTextField(labelWithString: L10n.text("Card_Profile"))
     private let profileSlotStack = NSStackView()
     private let profileStaleLabel = NSTextField(labelWithString: "")
@@ -337,15 +347,17 @@ final class FloatingPanel: NSPanel {
         hostRow.isHidden = true
         profileRow.isHidden = true
 
+        buildLocalHostRow()
         buildSplitRow()
         buildBatteryRow()
         buildEndpointRow()
+        localHostRow.isHidden = true
         splitRow.isHidden = true
         batteryRow.isHidden = true
         endpointRow.isHidden = true
 
         let cardStack = NSStackView(views: [
-            connectivityCardTitle, hostRow, profileRow, splitRow, batteryRow, endpointRow,
+            connectivityCardTitle, localHostRow, hostRow, profileRow, splitRow, batteryRow, endpointRow,
         ])
         cardStack.orientation = .vertical
         cardStack.alignment = .leading
@@ -358,6 +370,7 @@ final class FloatingPanel: NSPanel {
             cardStack.leadingAnchor.constraint(equalTo: connectivityCard.leadingAnchor, constant: 10),
             cardStack.trailingAnchor.constraint(equalTo: connectivityCard.trailingAnchor, constant: -10),
             cardStack.bottomAnchor.constraint(equalTo: connectivityCard.bottomAnchor, constant: -6),
+            localHostRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
             hostRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
             profileRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
             splitRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor),
@@ -444,6 +457,23 @@ final class FloatingPanel: NSPanel {
         endpointRow.addArrangedSubview(endpointLabel)
         endpointRow.addArrangedSubview(spacer)
         endpointRow.addArrangedSubview(endpointStaleLabel)
+    }
+
+    private func buildLocalHostRow() {
+        localHostLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        localHostLabel.textColor = .white
+        localHostLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        localHostRow.orientation = .horizontal
+        localHostRow.spacing = 8
+        localHostRow.alignment = .centerY
+        localHostRow.translatesAutoresizingMaskIntoConstraints = false
+        localHostRow.addArrangedSubview(localHostDot)
+        localHostRow.addArrangedSubview(localHostLabel)
+        localHostRow.addArrangedSubview(spacer)
+        localHostRow.setHuggingPriority(.defaultLow, for: .horizontal)
     }
 
     // MARK: - Compact single-row layout (displayMode == .compact)
@@ -590,6 +620,8 @@ final class FloatingPanel: NSPanel {
             stopStalenessTimer()
             cachedConnectivity = nil
             staleness.reset()
+            cachedHostStatus = nil
+            localHostRow.isHidden = true
             hostRow.isHidden = true
             profileRow.isHidden = true
             splitRow.isHidden = true
@@ -632,6 +664,7 @@ final class FloatingPanel: NSPanel {
         if let status = cachedStatus {
             update(status)
         }
+        renderLocalHostRow()
         renderConnectivity()
         reflowFrameToContent()
     }
@@ -676,6 +709,43 @@ final class FloatingPanel: NSPanel {
     func markConnectivityStaleOnDisconnect() {
         staleness.forceStaleAll()
         renderConnectivity()
+    }
+
+    /// Per-link "this computer" status (spec 005). `nil` → the keyboard exposes
+    /// no AA4 (or the link is down) → hide the row entirely (CF-8).
+    func update(hostStatus status: LocalHostStatus?) {
+        cachedHostStatus = status
+        renderLocalHostRow()
+        reflowFrameToContent()
+    }
+
+    private func renderLocalHostRow() {
+        guard let status = cachedHostStatus else {
+            localHostRow.isHidden = true
+            return
+        }
+        localHostRow.isHidden = false
+        let color: NSColor
+        let text: String
+        switch status {
+        case .inUseHere:
+            color = .systemGreen
+            text = L10n.text("HostLink_InUseHere")
+        case .activeElsewhere(let slot):
+            color = .systemOrange
+            text = L10n.format("HostLink_ActiveElsewhere", Int(slot))
+        case .onUsb:
+            color = .systemBlue
+            text = L10n.text("HostLink_OnUsb")
+        case .cannotDetermine:
+            color = .systemGray
+            text = L10n.text("HostLink_CannotDetermine")
+        case .disconnected:
+            color = .systemGray
+            text = L10n.text("HostLink_Disconnected")
+        }
+        localHostDot.layer?.backgroundColor = color.cgColor
+        localHostLabel.stringValue = text
     }
 
     private func renderConnectivity() {

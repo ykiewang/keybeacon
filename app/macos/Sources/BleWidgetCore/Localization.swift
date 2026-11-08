@@ -168,6 +168,12 @@ public enum L10n {
         "Endpoint_Ble": "Output: BLE",
         "Endpoint_Unknown": "Output: unknown",
         "Endpoint_Reserved": "Output: unknown (0x%02X)",
+
+        "HostLink_InUseHere": "In use on this computer",
+        "HostLink_ActiveElsewhere": "Keyboard active on another computer (P%d)",
+        "HostLink_OnUsb": "Keyboard on USB (not this BLE link)",
+        "HostLink_CannotDetermine": "Cannot determine",
+        "HostLink_Disconnected": "Disconnected",
     ]
 
     // MARK: Simplified Chinese
@@ -227,5 +233,11 @@ public enum L10n {
         "Endpoint_Ble": "输出:BLE",
         "Endpoint_Unknown": "输出:未知",
         "Endpoint_Reserved": "输出:未知(0x%02X)",
+
+        "HostLink_InUseHere": "正在此电脑使用",
+        "HostLink_ActiveElsewhere": "键盘正在另一台电脑使用(P%d)",
+        "HostLink_OnUsb": "键盘在 USB 输出(非本 BLE 链路)",
+        "HostLink_CannotDetermine": "无法确定",
+        "HostLink_Disconnected": "未连接",
     ]
 }

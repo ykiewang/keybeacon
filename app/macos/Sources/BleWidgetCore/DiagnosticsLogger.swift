@@ -151,5 +151,32 @@ public enum DiagnosticsLogger {
         public func discoveryAnomaly(reason: String) {
             log.warning("discovery.anomaly reason=\(reason, privacy: .public)")
         }
+
+        /// Spec 005: `AA4` was discovered but the firmware returned
+        /// `local_link_profile = 0` — the connection peer could not be resolved
+        /// to a profile slot (FR-003). The host renders "cannot determine" and
+        /// never guesses a slot.
+        public func hostLinkUnresolved() {
+            log.notice("hostlink.unresolved reason=firmware_returned_slot_0")
+        }
+
+        /// Spec 005: host-side inputs were insufficient to classify the per-link
+        /// status (active profile unknown / open / slot unread). `missing` names
+        /// the missing input category.
+        public func hostLinkCannotDetermine(missing: String) {
+            log.notice("hostlink.cannot_determine missing=\(missing, privacy: .public)")
+        }
+
+        /// Spec 005 / US2 (T034): a Link-slot re-read returned a slot that
+        /// differs from the previously-cached value — the host re-learned this
+        /// connection's slot (e.g. the keyboard was re-paired, or the peer
+        /// address resolved to a bond after connect). Info level; fires only on
+        /// a genuine change, not the initial read.
+        public func hostLinkReadBackSlot(from: UInt8, to: UInt8) {
+            log.info("""
+                hostlink.read_back_slot from=\(from, privacy: .public) \
+                to=\(to, privacy: .public)
+                """)
+        }
     }
 }

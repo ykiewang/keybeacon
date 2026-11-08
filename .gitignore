@@ -11,3 +11,14 @@ dist/
 
 # macOS
 .DS_Store
+
+# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -60,6 +60,17 @@
                 </StackPanel>
             </StackPanel>
 
+            <!-- Per-link host status (US1 / spec 005): "in use here" vs
+                 "active elsewhere (P{N})". Distinct from the global host-link
+                 row below; shown only when the keyboard exposes AA4. -->
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center"
+                        Visibility="{Binding ShowHostStatus, Converter={StaticResource BoolToVisibility}}">
+                <Ellipse Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"
+                         Fill="{Binding HostStatusDot}" />
+                <TextBlock Text="{Binding HostStatusText}" Foreground="White" FontSize="12"
+                           FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+
             <!-- Connectivity (US5) -->
             <ItemsControl ItemsSource="{Binding ConnectivityRows}" Margin="0,8,0,0"
                           Visibility="{Binding ShowConnectivity, Converter={StaticResource BoolToVisibility}}">

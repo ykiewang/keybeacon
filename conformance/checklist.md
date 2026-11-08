@@ -36,6 +36,13 @@ yields `SKIP` on all 1.1 rows and still conforms.
 | 11 | If exposed: Battery NOTIFY throttling respects **≥ 1 pp change OR ≥ 1 s since last emit** (OR relation); violations without hardware justification report WARN. | RECOMMENDED (if present) | **C11** (WARN) |
 | 12 | For split keyboards: the 1.1 characteristics are exposed **only on the central (host-link) role** (extension of C6). | REQUIRED (split) | **C12** (MANUAL) |
 
+## KBP 1.2 (added)
+
+| # | Requirement | Level | Tool check |
+|---|-------------|-------|-----------|
+| 13 | If exposed: Link-slot characteristic `AA440AA4-F5ED-4C48-84A1-8062D20D3D55` has properties `READ` **only** (no `NOTIFY`, no CCC `0x2902`), a READ returns **≥ 1 byte**, and `[0]` bit 7 = 0. | REQUIRED (if present) | **C13** |
+| 14 | If exposed: `[0]` bits 0–6 ∈ `{0} ∪ [1, profile_max_slots]` (0 = not-determined is allowed; any non-zero slot is within range, i.e. ≤ the Connectivity `profile_max_slots`). | REQUIRED (if present) | **C14** |
+
 ## How verification maps to results
 
 - **C1–C4** gate the exit code: any FAIL ⇒ the tool exits `1` and names the failing item.
@@ -98,6 +105,13 @@ when `bleak` is unavailable.
 | 10 | 若暴露：Connectivity NOTIFY 在任一状态性字段变化时触发，**且在字节一致的快照上被抑制**。 | REQUIRED（若暴露） | **C10** |
 | 11 | 若暴露：Battery NOTIFY 节流符合 **≥ 1 pp 变化 或 距上次 notify ≥ 1 秒**（或 关系）；在无硬件原因下违反该规则报告 WARN。 | RECOMMENDED（若暴露） | **C11**（WARN） |
 | 12 | 对于分体键盘：1.1 特征**仅在 central(主机链路)角色**暴露（扩展自 C6）。 | REQUIRED（分体） | **C12**（MANUAL） |
+
+## KBP 1.2（新增）
+
+| # | 要求 | 级别 | 工具检查 |
+|---|------|------|---------|
+| 13 | 若暴露：Link-slot 特征 `AA440AA4-F5ED-4C48-84A1-8062D20D3D55` 的属性为 `READ` **only**（无 `NOTIFY`、无 CCC `0x2902`），READ 返回 **≥ 1 字节**，且 `[0]` bit 7 = 0。 | REQUIRED（若暴露） | **C13** |
+| 14 | 若暴露：`[0]` bits 0–6 ∈ `{0} ∪ [1, profile_max_slots]`（允许 0 = 未确定；任何非零槽位都在范围内，即 ≤ Connectivity 的 `profile_max_slots`）。 | REQUIRED（若暴露） | **C14** |
 
 ## 验证如何映射到结果
 

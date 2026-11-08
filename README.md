@@ -76,6 +76,7 @@ spec time. These are candidates, not commitments.
 | Per-half link status | ✅ Shipped (v1.1) | a split half dropping offline is visible at a glance | High — proxied via `zmk_peripheral_battery_state_changed` + 75 s TTL (ZMK does not expose a central-side split-link API at commit `6b44d33d`) | KBP 1.1 · AA2 `split_flags` bits 0–1 |
 | Per-half battery | ✅ Shipped (v1.1) | know which half to charge | High — battery + peripheral-battery events (requires `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`) | KBP 1.1 · AA3 payload `[0]` / `[1]` |
 | Active output | ✅ Shipped (v1.1) | whether keystrokes go to USB or BLE | High — `zmk_endpoints_selected()` + change event | KBP 1.1 · AA2 `output_endpoint` byte |
+| Per-link host context | 🚧 Implemented, pending release (KBP 1.2) | tells *this* computer whether the keyboard is typing here vs active on another host — zero config | High — per-connection READ resolves the asking host's bonded slot ([`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)) | KBP 1.2 · AA4 `local_link_profile` (READ-only, per-connection) |
 | Charging status | ⚠️ Protocol-defined; hardware-dependent (corne lacks a charge-detect GPIO, so capability bits 5–6 stay `0`) | whether a half is charging | Low — most boards lack a charge-detect pin | KBP 1.1 · AA2 `charging_flags` bits 0–1 (opt-in via capability bits) |
 
 ### B. Input & lock state

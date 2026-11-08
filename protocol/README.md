@@ -4,7 +4,7 @@
 
 **English** · [中文](#zh-kbp)
 
-**Version**: 1.1.0 · **License**: MIT · **Status**: Released standard
+**Version**: 1.2.0 · **License**: MIT · **Status**: Released standard
 
 > **What this is**: KeyBeacon is an open, implementation-neutral protocol by which a keyboard
 > reports its **live internal state the host cannot otherwise know** — the active layer and the
@@ -191,6 +191,12 @@ tool automates):
 
 ## 13. Changelog
 
+- **1.2.0** — KBP 1.2 (MINOR): adds one optional, read-only characteristic
+  `AA440AA4-…` (per-link host context: the bonded slot *this* BLE connection maps
+  to, learned with zero configuration), enabling "in use on this computer" vs
+  "active on another computer" disambiguation across hosts bonded at once;
+  service UUID and all 1.0/1.1 payloads are unchanged. See §15 and
+  `CHANGELOG.md` 1.2.0.
 - **1.1.0** — KBP 1.1 (MINOR): adds two optional characteristics `AA440AA2-…`
   (Connectivity: capability bits + host-state + profile + split-link + output
   endpoint + per-half charging flags) and `AA440AA3-…` (Battery: overall or
@@ -369,6 +375,108 @@ This section introduces the following new conformance items (implemented in
 
 API names may evolve across ZMK releases; the implementation phase (`zmk-keybeacon` module) MUST verify against ZMK main at build time.
 
+## 15. KBP 1.2 Per-link host context (optional)
+
+**Added in KBP 1.2 (MINOR).** The service UUID is unchanged at `AA440AA0-…`; all
+KBP 1.0 / 1.1 characteristics (`AA440AA1-…`, `AA440AA2-…`, `AA440AA3-…`) are
+**byte-for-byte unchanged** and §14 is untouched. KBP 1.2 introduces **one new
+optional, read-only characteristic** that lets each connected host learn, with
+zero configuration, which bonded profile (slot) *its own* BLE link corresponds
+to — so a keyboard bonded to several hosts at once can tell "the keyboard is
+typing on **this** computer" apart from "active on another computer". A host that
+does not recognise this characteristic ignores it and keeps working as a KBP 1.1
+host.
+
+### 15.1 Scope & version
+
+- **KBP MAJOR**: 1 (service UUID `AA440AA0-F5ED-4C48-84A1-8062D20D3D55` **unchanged**).
+- **KBP MINOR**: bumped to **1.2**.
+- **Breaking changes**: none. `AA440AA1/AA2/AA3-…` are unchanged; §14 is untouched.
+- Backward-compatibility guarantees:
+  - A KBP ≤ 1.1 host connecting to a 1.2 keyboard → the new characteristic is not
+    in the host's list, so it is never read/subscribed; all 1.0/1.1 behaviour is
+    identical.
+  - A 1.2 host connecting to a ≤ 1.1 keyboard → GATT discovery does not find
+    `AA440AA4-…`; the host MUST fall back to link-level status only and MUST NOT
+    fabricate an "in use here / active elsewhere" claim.
+
+### 15.2 Why a read-only characteristic (rationale, non-normative)
+
+The active profile in §14 Connectivity is delivered by **broadcast NOTIFY** —
+every bonded host receives byte-identical payloads, so `profile_index` names the
+*globally* active slot, identical on every host. A GATT **READ**, by contrast, is
+inherently **per-connection**: the firmware knows which link issued it and MAY
+answer differently per host. Carrying the per-link slot on a **read-only**
+characteristic (no NOTIFY) guarantees a host's read is always its own
+per-connection value, with no broadcast frame to disambiguate from.
+
+### 15.3 The new characteristic
+
+| Item | Link-slot characteristic |
+|------|---------------------------|
+| UUID | `AA440AA4-F5ED-4C48-84A1-8062D20D3D55` |
+| Properties | `READ` only (MUST NOT `NOTIFY`; MUST NOT expose a CCC `0x2902`) |
+| Carries | the profile slot that *this* BLE connection maps to |
+| Optional | yes — the whole characteristic MAY be absent (firmware without per-link support) |
+| Presence | presence **is** the per-link capability signal (same convention as §14.5) |
+
+The characteristic lives under the **same** primary service as KBP 1.0
+(`AA440AA0-…`); the producer MUST NOT introduce a new service for 1.2.
+
+### 15.4 Link-slot characteristic payload
+
+#### 15.4.1 Layout (little-endian, **fixed length ≥ 1 byte**)
+
+| Offset | Size | Field | Range / encoding |
+|--------|------|-------|------------------|
+| `[0]` | 1 | `local_link_profile` | bits 0–6: 1-based slot this connection maps to (`0` = not determined / not applicable); bit 7: reserved (1.2 firmware MUST emit 0) |
+| `[1..N]` | ≥ 0 | reserved trailing bytes | future MINOR fields; **producer** emits 0 bytes in 1.2 (payload is exactly 1 byte); **consumer** MUST ignore the tail |
+
+#### 15.4.2 Per-connection semantics
+
+- The `local_link_profile` in a READ response is the slot of **the BLE connection that issued the READ**.
+- Because `AA440AA4-…` has no NOTIFY, there is no broadcast frame; every read a consumer performs returns its own per-connection value.
+
+#### 15.4.3 Producer invariants (firmware MUST)
+
+- **P-L1**: if `AA440AA4-…` is exposed → properties are exactly `READ` (no `NOTIFY`, no CCC).
+- **P-L2**: if the connection's peer cannot be resolved to a bonded slot (empty / unpaired / open / resolvable-private-address mismatch) → emit `local_link_profile` bits 0–6 = `0`; firmware MUST NOT emit a guessed slot.
+- **P-L3**: when bits 0–6 > 0, the value MUST be ≤ `profile_max_slots` (§14.3.1 `[3]`).
+- **P-L4**: `[0]` bit 7 MUST be 0 (reserved).
+- **P-L5**: like the §14 characteristics, `AA440AA4-…` is exposed only by the central (host-link) role of a split keyboard (extends §14.7 C12).
+
+#### 15.4.4 Consumer rules (host MUST)
+
+- **C-L1**: if `AA440AA4-…` is present → READ it once to learn `local_link_profile`; no subscription.
+- **C-L2**: if `AA440AA4-…` is absent → render link-level status only; MUST NOT render "in use here / active elsewhere" and MUST NOT fabricate a slot.
+- **C-L3**: payload length **< 1 byte** → treat as not-determined and log `hostlink.cannot_determine`.
+- **C-L4**: bits 0–6 > `profile_max_slots` → clamp the displayed slot to `profile_max_slots` and log `profile.out_of_range` (as §14.3.4 C-C4).
+- **C-L5**: payload `[1..]` MUST be ignored (MINOR forward-compatibility).
+- **C-L6**: all §14 Connectivity parsing (`[0..6]`, C-C1..C-C7) is **unchanged**.
+
+### 15.5 Discovery & read (consumer flow)
+
+- Discovery follows §14.5. After the service is confirmed and all characteristics are enumerated, the per-link capability is determined by `AA440AA4-…` **presence**:
+  - `AA440AA4-…` present → per-link host context available: READ it to learn this host's slot.
+  - `AA440AA4-…` present but `AA440AA2-…` absent → anomaly; host MUST log `discovery.anomaly` and treat per-link as unavailable (per-link needs the Connectivity active/output fields to compare against).
+- On every reconnect, the consumer MUST re-READ `AA440AA4-…` (session-scoped learning); the slot is **not** persisted across launches.
+
+### 15.6 Extension of the §10 / §14.7 conformance checklist
+
+This section introduces the following new conformance items (implemented in
+`conformance/checklist.md` as C13–C14):
+
+- **C13**: if `AA440AA4-…` is present → properties = `READ` only (no `NOTIFY`, no CCC), READ payload ≥ 1 byte, and `[0]` bit 7 = 0. *(REQUIRED if present.)*
+- **C14**: if `AA440AA4-…` is present → `[0]` bits 0–6 ∈ `{0} ∪ [1, profile_max_slots]` (0 allowed, meaning not-determined; otherwise within range). *(REQUIRED if present.)*
+
+### 15.7 Firmware reference mapping (non-normative, ZMK)
+
+| KBP 1.2 field | ZMK reference source |
+|------|------|
+| `local_link_profile` | in the GATT read callback, resolve `bt_conn_get_dst(conn)` to a bonded profile index (compare against the bonded-slot identity tables); emit `0` when no bonded slot matches the peer |
+
+API names may evolve across ZMK releases; the implementation phase (`zmk-keybeacon` module) MUST verify against ZMK main at build time.
+
 ---
 
 # KeyBeacon 协议（KBP）— 中文版
@@ -377,7 +485,7 @@ API names may evolve across ZMK releases; the implementation phase (`zmk-keybeac
 
 <a id="zh-kbp"></a>
 
-**版本**：1.1.0 · **许可**：MIT · **状态**：已发布标准
+**版本**：1.2.0 · **许可**：MIT · **状态**：已发布标准
 
 > **本文档是什么**：KeyBeacon 是一个开放的、与实现无关的协议。通过该协议，键盘可将**主机无法直接
 > 获知的活跃内部状态**——当前激活的层与按住的修饰键——通过 BLE 上报给桌面应用。本文档是该接口的
@@ -545,6 +653,10 @@ MAJOR 版本信号。
 
 ## §13. 变更日志
 
+- **1.2.0** — KBP 1.2（MINOR）：新增一个可选、只读特征 `AA440AA4-…`（每连接主机
+  上下文：**本** BLE 连接对应的已绑定槽位，零配置学到），使同时绑定的多台主机间可区分
+  "在此电脑使用"与"在另一台电脑使用"；服务 UUID 与全部 1.0/1.1 载荷均不变。详见 §15
+  与 `CHANGELOG.md` 1.2.0。
 - **1.1.0** — KBP 1.1（MINOR）：新增两个可选特征 `AA440AA2-…`（Connectivity：能力位 +
   主机状态 + profile + 分体链路 + 输出端点 + 按半充电位）与 `AA440AA3-…`（Battery：
   整板或按半电量百分比）；服务 UUID 与 `AA440AA1-…` 载荷均**不变**。详见 §14 与
@@ -711,5 +823,87 @@ MAJOR 版本信号。
 | `charging_flags.bit 0`（`has_left_charging`） | 可选：板级 charger GPIO（整板时为 overall；多数板不实现） |
 | `charging_flags.bit 1`（`has_right_charging`） | 可选：peripheral 侧 charger GPIO 经分体同步总线上报（仅 split central 需要） |
 | `overall_battery` / `left_battery` / `right_battery` | 订阅 `zmk_battery_state_changed` + `zmk_peripheral_battery_state_changed`；central 侧聚合 |
+
+API 名随 ZMK 版本可能有变；实施阶段（`zmk-keybeacon` 外部模块）必须 核对当前 ZMK main 分支的实际符号。
+
+## §15. KBP 1.2 每连接主机上下文（可选特征）
+
+**KBP 1.2（MINOR）新增**。服务 UUID 保持 `AA440AA0-…` 不变；KBP 1.0 / 1.1 的所有特征（`AA440AA1-…`、`AA440AA2-…`、`AA440AA3-…`）**逐字节不变**，§14 完全不动。KBP 1.2 引入**一个新的可选、只读特征**，让每台已连接主机**零配置**学到**它自己**这条 BLE 链路对应的是哪个已绑定 profile（槽位）——于是同时绑定多台主机的键盘能区分"键盘正在**此**电脑打字"与"正在另一台电脑使用"。不识别该特征的主机忽略它并继续按 KBP 1.1 主机工作。
+
+### §15.1 范围与版本
+
+- **KBP MAJOR**：1（服务 UUID `AA440AA0-F5ED-4C48-84A1-8062D20D3D55` **不变**）。
+- **KBP MINOR**：升至 **1.2**。
+- **破坏性变更**：无。`AA440AA1/AA2/AA3-…` 均不变；§14 完全不动。
+- 向后兼容保证：
+  - KBP ≤ 1.1 主机连接 1.2 键盘 → 新特征不在主机的列表中，永不被读取/订阅；1.0/1.1 行为完全一致。
+  - 1.2 主机连接 ≤ 1.1 键盘 → GATT 发现找不到 `AA440AA4-…`；主机 必须 仅退化为链路级状态，必须 不臆造"在此使用 / 在别处使用"的结论。
+
+### §15.2 为何采用只读特征（设计理由，非规范性）
+
+§14 Connectivity 的活跃 profile 通过**广播 NOTIFY** 下发——每台已绑定主机收到逐字节相同的载荷，故 `profile_index` 命名的是**全局**活跃槽位，在每台主机上都相同。相较之下，GATT **READ** 天然是**每连接的**：固件知道是哪条链路发起的读，可 对每台主机给出不同答案。把每连接槽位承载在**只读**特征（无 NOTIFY）上，可保证主机读到的永远是它自己的每连接值，不存在需要区分的广播帧。
+
+### §15.3 新特征
+
+| 项 | Link-slot 特征 |
+|---|----------------|
+| UUID | `AA440AA4-F5ED-4C48-84A1-8062D20D3D55` |
+| 属性 | `READ` only（必须 不 `NOTIFY`；必须 不暴露 CCC `0x2902`） |
+| 承载 | **本** BLE 连接对应的 profile 槽位 |
+| 可选 | 是——整个特征 可 缺省（固件不支持 per-link 时） |
+| 存在性 | 其存在**即**为 per-link 能力信号（与 §14.5 同一约定） |
+
+该特征位于 KBP 1.0 **同一个** 主服务 `AA440AA0-…` 下；生产者 必须 不新增 service。
+
+### §15.4 Link-slot 特征载荷
+
+#### §15.4.1 布局（小端序，**固定长度 ≥ 1 字节**）
+
+| 偏移 | 大小 | 字段 | 范围 / 编码 |
+|------|-----|-----|------------|
+| `[0]` | 1 | `local_link_profile` | bits 0–6：本连接对应的 1 起槽位（`0` = 未确定 / 不适用）；bit 7：保留（1.2 固件 必须 发 0） |
+| `[1..N]` | ≥ 0 | 保留尾部字节 | 未来 MINOR 的追加字段；**生产者** 在 1.2 发 0 字节（即载荷恰为 1 字节）；**消费者** 必须 忽略尾部 |
+
+#### §15.4.2 每连接语义
+
+- READ 响应中的 `local_link_profile` 是**发起该 READ 的这条 BLE 连接**对应的槽位。
+- 因 `AA440AA4-…` 无 NOTIFY，不存在广播帧；消费者的每一次读都得到它自己的每连接值。
+
+#### §15.4.3 生产者不变量（固件 必须 保证）
+
+- **P-L1**：`AA440AA4-…` 若暴露 → 属性恰为 `READ`（无 `NOTIFY`、无 CCC）。
+- **P-L2**：若无法把连接 peer 解析到已绑定槽位（空 / 未配对 / open / 可解析私有地址不匹配）→ 发 `local_link_profile` bits 0–6 = `0`；固件 必须 不发猜测的槽位。
+- **P-L3**：bits 0–6 > 0 时，其值 必须 ≤ `profile_max_slots`（§14.3.1 `[3]`）。
+- **P-L4**：`[0]` bit 7 必须 为 0（保留）。
+- **P-L5**：与 §14 诸特征一样，`AA440AA4-…` 仅由分体键盘的 central（host-link）角色暴露（延伸 §14.7 C12）。
+
+#### §15.4.4 消费者规则（主机 必须 保证）
+
+- **C-L1**：`AA440AA4-…` 若存在 → READ 一次以学到 `local_link_profile`；无需订阅。
+- **C-L2**：`AA440AA4-…` 若缺失 → 仅渲染链路级状态；必须 不渲染"在此使用 / 在别处使用"，必须 不臆造槽位。
+- **C-L3**：载荷长度 **< 1 字节** → 视为未确定并记 `hostlink.cannot_determine`。
+- **C-L4**：bits 0–6 > `profile_max_slots` → 把显示的槽位钳制在 `profile_max_slots` 并记 `profile.out_of_range`（同 §14.3.4 C-C4）。
+- **C-L5**：载荷 `[1..]` 必须 被忽略（MINOR 向上兼容）。
+- **C-L6**：§14 Connectivity 的全部解析（`[0..6]`、C-C1..C-C7）**不变**。
+
+### §15.5 发现与读取（消费者流程）
+
+- 发现沿用 §14.5。服务确认且所有特征枚举完毕后，per-link 能力由 `AA440AA4-…` 的**存在性**判定：
+  - `AA440AA4-…` 存在 → per-link 主机上下文可用：READ 它以学到本主机槽位。
+  - `AA440AA4-…` 存在但 `AA440AA2-…` 缺失 → 异常；主机 必须 记 `discovery.anomaly` 并按 per-link 不可用处理（per-link 需要 Connectivity 的 active/output 字段做比较）。
+- 每次重连，消费者 必须 重新 READ `AA440AA4-…`（会话级学习）；槽位 **不** 跨启动持久化。
+
+### §15.6 与 §10 / §14.7 一致性清单的扩展
+
+本节对应的新增一致性条目（在 `conformance/checklist.md` 落实为 C13–C14）：
+
+- **C13**：`AA440AA4-…` 若存在 → properties = `READ` only（无 `NOTIFY`、无 CCC），READ 载荷 ≥ 1 字节，且 `[0]` bit 7 = 0。*（若存在则 REQUIRED。）*
+- **C14**：`AA440AA4-…` 若存在 → `[0]` bits 0–6 ∈ `{0} ∪ [1, profile_max_slots]`（允许 0，表未确定；否则在范围内）。*（若存在则 REQUIRED。）*
+
+### §15.7 固件参考映射（非规范性，ZMK）
+
+| KBP 1.2 字段 | ZMK 参考源 |
+|-------------|-----------|
+| `local_link_profile` | 在 GATT read 回调中，用 `bt_conn_get_dst(conn)` 把 peer 解析到已绑定 profile 索引（与绑定槽位身份表比对）；无匹配槽位时发 `0` |
 
 API 名随 ZMK 版本可能有变；实施阶段（`zmk-keybeacon` 外部模块）必须 核对当前 ZMK main 分支的实际符号。
