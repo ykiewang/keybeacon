@@ -249,9 +249,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             // No per-link signal yet (old firmware / pre-AA4): fall back to the
             // link-level glyph; status is effectively cannot-determine.
-            var connected = conn.HostState.Connected;
-            CompactHostSymbol = connected ? "●" : "○";
-            CompactHostSymbolBrush = connected ? DotGreen : DotGray;
+            var linkUp = conn.HostState.Connected;
+            CompactHostSymbol = linkUp ? "●" : "○";
+            CompactHostSymbolBrush = linkUp ? DotGreen : DotGray;
         }
         CompactProfileVisible = cap.HasProfile;
         if (cap.HasProfile)
