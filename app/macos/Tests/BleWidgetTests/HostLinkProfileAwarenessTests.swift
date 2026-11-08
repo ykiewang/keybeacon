@@ -394,4 +394,43 @@ final class HostLinkProfileAwarenessTests: XCTestCase {
             ), .onUsb
         )
     }
+
+    // MARK: - T044 [Phase 7]: hostStatusVisual five-state encoding (V-1/V-4)
+
+    func testVisual_exhaustive_fiveStates() {
+        // Colour + symbol single source of truth (host-status-visual.md V-1).
+        // Both full and compact modes consume this exact mapping (FR-016).
+        XCTAssertEqual(hostStatusVisual(for: .inUseHere),
+                       HostStatusVisual(color: .green, symbol: "●"))
+        XCTAssertEqual(hostStatusVisual(for: .activeElsewhere(slot: 3)),
+                       HostStatusVisual(color: .orange, symbol: "◐"))
+        XCTAssertEqual(hostStatusVisual(for: .onUsb),
+                       HostStatusVisual(color: .blue, symbol: "◆"))
+        XCTAssertEqual(hostStatusVisual(for: .cannotDetermine),
+                       HostStatusVisual(color: .gray, symbol: "○"))
+        XCTAssertEqual(hostStatusVisual(for: .disconnected),
+                       HostStatusVisual(color: .red, symbol: "✕"))
+    }
+
+    func testVisual_disconnectedIsRed_notGray_distinctFromCannotDetermine() {
+        // V-2.3: "not connected" reads as an alarm (red), never confused with
+        // the grey "unknown" state.
+        XCTAssertEqual(hostStatusVisual(for: .disconnected).color, .red)
+        XCTAssertNotEqual(hostStatusVisual(for: .disconnected).color,
+                          hostStatusVisual(for: .cannotDetermine).color)
+        XCTAssertNotEqual(hostStatusVisual(for: .disconnected).symbol,
+                          hostStatusVisual(for: .cannotDetermine).symbol)
+    }
+
+    func testVisual_coloursAreUniquePerState() {
+        // Each state maps to a distinct colour; blue is reserved for USB so it
+        // never collides with active-elsewhere (V-1 rationale).
+        let all: [LocalHostStatus] = [
+            .inUseHere, .activeElsewhere(slot: 2), .onUsb, .cannotDetermine, .disconnected,
+        ]
+        let colors = all.map { hostStatusVisual(for: $0).color }
+        XCTAssertEqual(Set(colors.map { "\($0)" }).count, all.count)
+        XCTAssertEqual(hostStatusVisual(for: .onUsb).color, .blue)
+        XCTAssertEqual(hostStatusVisual(for: .activeElsewhere(slot: 1)).color, .orange)
+    }
 }

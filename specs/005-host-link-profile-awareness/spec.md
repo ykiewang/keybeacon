@@ -42,6 +42,7 @@ When the user flips the keyboard's active profile back to the Mac (P1), the Mac 
 1. **Given** a KBP per-link-aware keyboard bonded to Host A (P1) and Host B (P2), active on P1, **When** both apps are connected, **Then** Host A shows "in use on this computer" and Host B shows "keyboard active on another computer (P1)".
 2. **Given** the same setup, **When** the user switches the active profile from P1 to P2 on the keyboard, **Then** within ≤ 1 s Host A flips to "active on another computer (P2)" and Host B flips to "in use on this computer", with no BLE disconnect on either side.
 3. **Given** the keyboard is physically powered off / out of range of Host A, **When** Host A's BLE link drops, **Then** Host A shows "disconnected" (not any retained "in use" state) — the link-loss signal wins over any cached active-slot value.
+4. **Given** the app is in **compact mode** (no inline status text), **When** the keyboard is active on this host versus active on another host versus disconnected, **Then** the per-link indicator encodes the same five-state status as the full card — through one shared colour+symbol mapping (`in use here` green-solid, `active elsewhere` orange-half + `P{N}`, `on USB` blue, `cannot determine` grey-hollow, `disconnected` red-cross) — so the mode never hides whether the keyboard is typing here.
 
 ---
 
@@ -119,6 +120,7 @@ A user on the currently released firmware (no per-link field) with the new app, 
 
 - **FR-014**: Payload parsing and the status-classification logic MUST be covered by pure-function unit tests runnable without BLE hardware, and the mapping from wire bytes → the five status states MUST be exhaustively tested.
 - **FR-015**: The normative protocol documents (`protocol/README.md`, `protocol/CHANGELOG.md`, conformance checklist) MUST be updated as bilingual English/中文 mirrors (§VI) describing the new additive field/semantics.
+- **FR-016**: The five-state "this computer" status MUST be conveyed in **both** display modes — the full card **and** the compact single-row mode. The compact mode carries no inline status text, so it MUST encode the status on the per-link indicator (the dot preceding the active-profile label) using a **single, shared visual mapping** reused verbatim by both modes (macOS + Windows), never a mode-specific scheme. The mapping MUST use **colour + shape/symbol + hover text** redundancy so the state is distinguishable without relying on colour alone (accessibility); the `disconnected` state MUST be visually distinct (red) from `cannotDetermine` (grey), so "not connected" reads as an alarm, not as "unknown". A host that exposes no per-link signal (old firmware) MUST encode as `cannotDetermine` (never a fabricated state).
 
 ### Key Entities *(include if feature involves data)*
 

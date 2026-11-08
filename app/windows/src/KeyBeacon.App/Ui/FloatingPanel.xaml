@@ -67,6 +67,8 @@
                         Visibility="{Binding ShowHostStatus, Converter={StaticResource BoolToVisibility}}">
                 <Ellipse Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"
                          Fill="{Binding HostStatusDot}" />
+                <TextBlock Text="{Binding HostStatusSymbol}" Foreground="{Binding HostStatusSymbolBrush}"
+                           FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                 <TextBlock Text="{Binding HostStatusText}" Foreground="White" FontSize="12"
                            FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
@@ -126,6 +128,9 @@
                 <Ellipse Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"
                          Fill="{Binding CompactHostDot}"
                          Visibility="{Binding CompactHostDotVisible, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding CompactHostSymbol}" Foreground="{Binding CompactHostSymbolBrush}"
+                           FontSize="10" VerticalAlignment="Center" Margin="0,0,3,0"
+                           Visibility="{Binding CompactHostDotVisible, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Text="{Binding CompactProfileText}" Foreground="White"
                            FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"
                            Visibility="{Binding CompactProfileVisible, Converter={StaticResource BoolToVisibility}}" />

@@ -2,8 +2,9 @@
 
 Windows desktop client for KeyBeacon (KBP), mirroring the macOS app: a system
 tray presence plus an always-on-top floating panel that shows the connected
-keyboard's current layer, modifiers, and — for KBP 1.1 — connectivity and
-battery.
+keyboard's current layer, modifiers, — for KBP 1.1 — connectivity and battery,
+and — for KBP 1.2 — per-link host context (whether the keyboard is typing on
+*this* computer vs active on another host).
 
 Spec: [`specs/003-windows-desktop-client`](../../specs/003-windows-desktop-client).
 Interface language: [`specs/004-bilingual-ui-language`](../../specs/004-bilingual-ui-language).

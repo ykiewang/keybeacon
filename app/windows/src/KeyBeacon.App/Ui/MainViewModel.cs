@@ -82,6 +82,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string HostStatusText { get => _hostStatusText; private set => Set(ref _hostStatusText, value); }
     private Brush _hostStatusDot = DotGray;
     public Brush HostStatusDot { get => _hostStatusDot; private set => Set(ref _hostStatusDot, value); }
+    private string _hostStatusSymbol = string.Empty;
+    public string HostStatusSymbol { get => _hostStatusSymbol; private set => Set(ref _hostStatusSymbol, value); }
+    private Brush _hostStatusSymbolBrush = DotGray;
+    public Brush HostStatusSymbolBrush { get => _hostStatusSymbolBrush; private set => Set(ref _hostStatusSymbolBrush, value); }
 
     // Display-mode (full vs single-row compact), driven from the tray menu and
     // persisted in settings. Mirrors macOS DisplayMode.
@@ -103,6 +107,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool CompactHostDotVisible { get => _compactHostDotVisible; private set => Set(ref _compactHostDotVisible, value); }
     private Brush _compactHostDot = DotGray;
     public Brush CompactHostDot { get => _compactHostDot; private set => Set(ref _compactHostDot, value); }
+    private string _compactHostSymbol = string.Empty;
+    public string CompactHostSymbol { get => _compactHostSymbol; private set => Set(ref _compactHostSymbol, value); }
+    private Brush _compactHostSymbolBrush = DotGray;
+    public Brush CompactHostSymbolBrush { get => _compactHostSymbolBrush; private set => Set(ref _compactHostSymbolBrush, value); }
     private bool _compactProfileVisible;
     public bool CompactProfileVisible { get => _compactProfileVisible; private set => Set(ref _compactProfileVisible, value); }
     private string _compactProfileText = string.Empty;
@@ -138,6 +146,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private static readonly Brush DotGray = FrozenBrush(0x8E, 0x8E, 0x93);
     private static readonly Brush DotOrange = FrozenBrush(0xFF, 0x9F, 0x0A);
     private static readonly Brush DotBlue = FrozenBrush(0x0A, 0x84, 0xFF);
+
+    /// <summary>Map the platform-agnostic <see cref="HostStatusColor"/> palette to
+    /// WPF brushes. Single source of truth is <see cref="HostStatusVisual"/>
+    /// (contract host-status-visual.md V-1); this only translates it. Parity with
+    /// macOS <c>FloatingPanel.nsColor</c>.</summary>
+    private static Brush HostBrush(HostStatusColor c) => c switch
+    {
+        HostStatusColor.Green => DotGreen,
+        HostStatusColor.Orange => DotOrange,
+        HostStatusColor.Blue => DotBlue,
+        HostStatusColor.Gray => DotGray,
+        HostStatusColor.Red => DotRed,
+    };
 
     private static Brush FrozenBrush(byte r, byte g, byte b)
     {
@@ -213,11 +234,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        // Host segment: dot (if host-connection capable) + profile index.
+        // Host segment: dot + symbol (if host-connection capable) + profile index.
+        // Colour/symbol come from the SAME five-state visual the full card uses
+        // (host-status-visual.md, FR-016), so compact mode tells "in use here"
+        // from "active elsewhere" at a glance — the whole point of this dot.
         ShowCompactHost = cap.HasHostConnection || cap.HasProfile;
         CompactHostDotVisible = cap.HasHostConnection;
-        if (cap.HasHostConnection)
-            CompactHostDot = conn.HostState.Connected ? DotGreen : DotGray;
+        if (s.HostStatus is { } hostStatus)
+        {
+            var visual = HostStatusVisual.For(hostStatus);
+            CompactHostDot = HostBrush(visual.Color);
+            CompactHostSymbol = visual.Symbol;
+            CompactHostSymbolBrush = HostBrush(visual.Color);
+        }
+        else if (cap.HasHostConnection)
+        {
+            // No per-link signal yet (old firmware / pre-AA4): fall back to the
+            // link-level dot; status is effectively cannot-determine.
+            var connected = conn.HostState.Connected;
+            CompactHostDot = connected ? DotGreen : DotGray;
+            CompactHostSymbol = connected ? "●" : "○";
+            CompactHostSymbolBrush = connected ? DotGreen : DotGray;
+        }
         CompactProfileVisible = cap.HasProfile;
         if (cap.HasProfile)
         {
@@ -381,29 +419,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         ShowHostStatus = true;
-        switch (hs.Kind)
+        // Single source of truth: colour + symbol come from the shared
+        // HostStatusVisual mapping (host-status-visual.md V-1). The text comes
+        // from the bilingual table (data-model.md §6). disconnected is red,
+        // visually distinct from the grey cannot-determine. Parity with macOS
+        // renderLocalHostRow.
+        var visual = HostStatusVisual.For(hs);
+        HostStatusDot = HostBrush(visual.Color);
+        HostStatusSymbol = visual.Symbol;
+        HostStatusSymbolBrush = HostBrush(visual.Color);
+        HostStatusText = hs.Kind switch
         {
-            case LocalHostStatusKind.InUseHere:
-                HostStatusDot = DotGreen;
-                HostStatusText = _loc.Get("HostLink_InUseHere");
-                break;
-            case LocalHostStatusKind.ActiveElsewhere:
-                HostStatusDot = DotOrange;
-                HostStatusText = _loc.Format("HostLink_ActiveElsewhere", hs.Slot);
-                break;
-            case LocalHostStatusKind.OnUsb:
-                HostStatusDot = DotBlue;
-                HostStatusText = _loc.Get("HostLink_OnUsb");
-                break;
-            case LocalHostStatusKind.CannotDetermine:
-                HostStatusDot = DotGray;
-                HostStatusText = _loc.Get("HostLink_CannotDetermine");
-                break;
-            case LocalHostStatusKind.Disconnected:
-                HostStatusDot = DotGray;
-                HostStatusText = _loc.Get("HostLink_Disconnected");
-                break;
-        }
+            LocalHostStatusKind.InUseHere => _loc.Get("HostLink_InUseHere"),
+            LocalHostStatusKind.ActiveElsewhere => _loc.Format("HostLink_ActiveElsewhere", hs.Slot),
+            LocalHostStatusKind.OnUsb => _loc.Get("HostLink_OnUsb"),
+            LocalHostStatusKind.CannotDetermine => _loc.Get("HostLink_CannotDetermine"),
+            LocalHostStatusKind.Disconnected => _loc.Get("HostLink_Disconnected"),
+        };
     }
 
     private string OutputLabel(ConnectivityStatus.OutputKind kind) => kind switch

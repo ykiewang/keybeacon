@@ -220,3 +220,24 @@ Foundational 完成后：开发者 A 做 macOS 线、开发者 B 做 Windows 线
 - 既有 `ConnectivityStatus`/`CapabilityMatrix` **零改动**是本方案（方案 A）的硬约束，T038 专门回归确认
 - 每个 US 可停在 checkpoint 独立验收
 - 每个任务或逻辑组完成后提交
+
+---
+
+## Phase 7: 延续 — 精简模式五态视觉编码（FR-016）
+
+**Goal**: 精简模式（单行）与完整模式共用同一套 `LocalHostStatus` 视觉编码（颜色 + 符号 + 悬停文案），使精简模式也能区分「本机在用 / 他机在用 / USB / 未知 / 未连接」。契约：[`contracts/host-status-visual.md`](contracts/host-status-visual.md)。
+
+**Independent Test**: 键盘绑两机、切 active profile；在精简模式下观察 profile 指示点——本机=绿实心、他机=橙半填充+`P{N}`、USB=蓝菱形、未知=灰空心、未连接=红叉，且在完整模式同一状态颜色/符号一致。
+
+### Tests for Phase 7（test-first）
+
+- [X] T044 [P] macOS `HostStatusVisual` 纯函数单测 in `app/macos/Tests/BleWidgetTests/HostLinkProfileAwarenessTests.swift`：五态 → (color,symbol,compactText,tooltip) 穷举，对齐 V-4
+- [X] T045 [P] Windows `HostStatusVisual` 纯函数单测 in `app/windows/tests/KeyBeacon.Core.Tests/HostContextStatusTests.cs`，用例逐条对齐 macOS（V-2.6 parity）
+
+### Implementation for Phase 7
+
+- [X] T046 macOS 新增 `HostStatusVisual`（`app/macos/Sources/BleWidgetCore/`）：单一真相源映射（V-1）；`FloatingPanel.renderLocalHostRow` 与 `renderCompactSegments` 的 host 指示点均改为消费它；`disconnected` 转红、`cannotDetermine` 保持灰空心；精简点在 AA4 缺失时回退 `cannotDetermine` 编码；点/行加 `toolTip`（V-2.2）
+- [X] T047 Windows 新增 `HostStatusVisual`（`app/windows/src/KeyBeacon.Core/`）同构映射；`MainViewModel` + `FloatingPanel.xaml` 完整行与精简段的 host 指示点均改为消费它（依赖 T045）
+- [X] T048 两端 parity 复核：五态颜色/符号/精简文案/悬停文案逐条对齐（V-2.6）；`swift test` + `dotnet test` 全绿
+
+**Checkpoint**: 精简模式与完整模式对同一 `LocalHostStatus` 呈现完全一致；色盲可通过形状区分；老固件回退灰空心。
