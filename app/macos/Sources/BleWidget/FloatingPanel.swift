@@ -48,7 +48,10 @@ final class FloatingPanel: NSPanel {
     // higher-level "in use *here* vs *elsewhere*" question that only a
     // per-connection AA4 READ can honestly resolve. Hidden unless the active
     // keyboard exposes AA4 (old firmware → no new UI, CF-8).
-    private let localHostDot = FloatingPanel.makeDot(diameter: 10)
+    // The status indicator is a single coloured glyph (●◐◆○✕) that carries
+    // BOTH colour and shape — not a plain dot plus a symbol (that read as two
+    // dots). See host-status-visual.md V-1.
+    private let localHostSymbol = NSTextField(labelWithString: "")
     private let localHostLabel = NSTextField(labelWithString: "")
     private let localHostRow = NSStackView()
     private var cachedHostStatus: LocalHostStatus?
@@ -101,7 +104,7 @@ final class FloatingPanel: NSPanel {
         NSTextField(labelWithString: $0)
     }
     private let compactSep1 = NSTextField(labelWithString: "│")
-    private let compactHostDot = FloatingPanel.makeDot(diameter: 8)
+    private let compactHostSymbol = NSTextField(labelWithString: "")
     private let compactProfileLabel = NSTextField(labelWithString: "P—")
     private let compactSep2 = NSTextField(labelWithString: "│")
     private let compactSplitLeftDot = FloatingPanel.makeDot(diameter: 7)
@@ -154,6 +157,19 @@ final class FloatingPanel: NSPanel {
             v.heightAnchor.constraint(equalToConstant: diameter),
         ])
         return v
+    }
+
+    /// Map the platform-agnostic `HostStatusColor` palette to AppKit colours.
+    /// Single source of truth lives in `BleWidgetCore.HostStatusVisual`
+    /// (contract host-status-visual.md V-1); this only translates it.
+    private static func nsColor(_ c: HostStatusColor) -> NSColor {
+        switch c {
+        case .green:  return .systemGreen
+        case .orange: return .systemOrange
+        case .blue:   return .systemBlue
+        case .gray:   return .systemGray
+        case .red:    return .systemRed
+        }
     }
 
     var isLocked: Bool {
@@ -460,6 +476,10 @@ final class FloatingPanel: NSPanel {
     }
 
     private func buildLocalHostRow() {
+        // A single coloured glyph conveys both colour and shape (●◐◆○✕).
+        localHostSymbol.font = .systemFont(ofSize: 13, weight: .regular)
+        localHostSymbol.textColor = .white
+        localHostSymbol.translatesAutoresizingMaskIntoConstraints = false
         localHostLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         localHostLabel.textColor = .white
         localHostLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -467,10 +487,10 @@ final class FloatingPanel: NSPanel {
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
         localHostRow.orientation = .horizontal
-        localHostRow.spacing = 8
+        localHostRow.spacing = 6
         localHostRow.alignment = .centerY
         localHostRow.translatesAutoresizingMaskIntoConstraints = false
-        localHostRow.addArrangedSubview(localHostDot)
+        localHostRow.addArrangedSubview(localHostSymbol)
         localHostRow.addArrangedSubview(localHostLabel)
         localHostRow.addArrangedSubview(spacer)
         localHostRow.setHuggingPriority(.defaultLow, for: .horizontal)
@@ -501,15 +521,18 @@ final class FloatingPanel: NSPanel {
             sep.translatesAutoresizingMaskIntoConstraints = false
         }
 
-        // Host segment: dot + "P1".
+        // Host segment: coloured status glyph + "P1".
         compactProfileLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         compactProfileLabel.textColor = .white
         compactProfileLabel.translatesAutoresizingMaskIntoConstraints = false
+        compactHostSymbol.font = .systemFont(ofSize: 11, weight: .regular)
+        compactHostSymbol.textColor = .white
+        compactHostSymbol.translatesAutoresizingMaskIntoConstraints = false
         compactHostSegment.orientation = .horizontal
         compactHostSegment.spacing = 4
         compactHostSegment.alignment = .centerY
         compactHostSegment.translatesAutoresizingMaskIntoConstraints = false
-        compactHostSegment.addArrangedSubview(compactHostDot)
+        compactHostSegment.addArrangedSubview(compactHostSymbol)
         compactHostSegment.addArrangedSubview(compactProfileLabel)
 
         // Split segment: ●L85 ●R72 (with charging ⚡ overlays).
@@ -719,33 +742,40 @@ final class FloatingPanel: NSPanel {
         reflowFrameToContent()
     }
 
+    /// The full bilingual sentence for a status — used as the compact indicator's
+    /// hover tooltip (redundant accessibility, host-status-visual.md V-2.2).
+    private static func fullHostStatusText(_ status: LocalHostStatus) -> String {
+        switch status {
+        case .inUseHere:
+            return L10n.text("HostLink_InUseHere")
+        case .activeElsewhere(let slot):
+            return L10n.format("HostLink_ActiveElsewhere", Int(slot))
+        case .onUsb:
+            return L10n.text("HostLink_OnUsb")
+        case .cannotDetermine:
+            return L10n.text("HostLink_CannotDetermine")
+        case .disconnected:
+            return L10n.text("HostLink_Disconnected")
+        }
+    }
+
     private func renderLocalHostRow() {
         guard let status = cachedHostStatus else {
             localHostRow.isHidden = true
             return
         }
         localHostRow.isHidden = false
-        let color: NSColor
-        let text: String
-        switch status {
-        case .inUseHere:
-            color = .systemGreen
-            text = L10n.text("HostLink_InUseHere")
-        case .activeElsewhere(let slot):
-            color = .systemOrange
-            text = L10n.format("HostLink_ActiveElsewhere", Int(slot))
-        case .onUsb:
-            color = .systemBlue
-            text = L10n.text("HostLink_OnUsb")
-        case .cannotDetermine:
-            color = .systemGray
-            text = L10n.text("HostLink_CannotDetermine")
-        case .disconnected:
-            color = .systemGray
-            text = L10n.text("HostLink_Disconnected")
-        }
-        localHostDot.layer?.backgroundColor = color.cgColor
+        // Single source of truth: colour + symbol come from the shared
+        // `hostStatusVisual` mapping (host-status-visual.md V-1). The text comes
+        // from the bilingual table (data-model.md §6). `disconnected` is red,
+        // visually distinct from the grey "cannot determine".
+        let visual = hostStatusVisual(for: status)
+        let text = Self.fullHostStatusText(status)
+        localHostSymbol.stringValue = visual.symbol
+        localHostSymbol.textColor = Self.nsColor(visual.color)
         localHostLabel.stringValue = text
+        // Redundant accessibility: hover shows the full sentence.
+        localHostRow.toolTip = text
     }
 
     private func renderConnectivity() {
@@ -778,19 +808,36 @@ final class FloatingPanel: NSPanel {
     /// Called at the tail of `renderConnectivity` so compact state stays
     /// current even while hidden (switching displayMode is instant).
     private func renderCompactSegments(status s: ConnectivityStatus, now: TimeInterval) {
-        // Host dot + profile index — one visual segment.
+        // Host dot + symbol + profile index — one visual segment.
         let hostVisible = s.capability.hasHostConnection || s.capability.hasProfile
         compactHostSegment.isHidden = !hostVisible
         compactSep1.isHidden = !hostVisible
-        if s.capability.hasHostConnection {
-            compactHostDot.isHidden = false
-            let connected = s.link.connected
-            compactHostDot.layer?.backgroundColor =
-                (connected ? NSColor.systemGreen : NSColor.systemGray).cgColor
+        if let hostStatus = cachedHostStatus {
+            // Per-link aware (AA4 present): encode the derived five-state status
+            // on a single coloured glyph via the SAME shared mapping the full
+            // card uses (host-status-visual.md, FR-016). Colour + shape in one
+            // element — never a plain dot plus a symbol (that reads as two dots).
+            let visual = hostStatusVisual(for: hostStatus)
+            compactHostSymbol.isHidden = false
+            compactHostSymbol.stringValue = visual.symbol
+            compactHostSymbol.textColor = Self.nsColor(visual.color)
+            // Redundant accessibility: hover reveals the full status sentence.
+            compactHostSegment.toolTip = Self.fullHostStatusText(hostStatus)
             let hostStale = isStaleTracked(fieldKey: "host_connection", now: now)
-            compactHostDot.alphaValue = hostStale ? 0.5 : 1.0
+            compactHostSymbol.alphaValue = hostStale ? 0.5 : 1.0
+        } else if s.capability.hasHostConnection {
+            // No per-link signal yet (old firmware / pre-AA4): fall back to the
+            // link-level glyph; the status is effectively "cannot determine".
+            compactHostSymbol.isHidden = false
+            let connected = s.link.connected
+            let color = connected ? NSColor.systemGreen : NSColor.systemGray
+            compactHostSymbol.stringValue = connected ? "●" : "○"
+            compactHostSymbol.textColor = color
+            compactHostSegment.toolTip = L10n.text("HostLink_CannotDetermine")
+            let hostStale = isStaleTracked(fieldKey: "host_connection", now: now)
+            compactHostSymbol.alphaValue = hostStale ? 0.5 : 1.0
         } else {
-            compactHostDot.isHidden = true
+            compactHostSymbol.isHidden = true
         }
         if s.capability.hasProfile {
             compactProfileLabel.isHidden = false

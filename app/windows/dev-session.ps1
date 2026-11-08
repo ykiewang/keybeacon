@@ -230,7 +230,27 @@ function Sync-Repo {
     return $true
 }
 
+function Stop-RunningClient {
+    # A previously launched client keeps KeyBeacon.Core.dll locked, which makes
+    # the next build fail with MSB3027/MSB3021. Stop any lingering instances
+    # before building. Best-effort: never fail the whole run on this.
+    $procs = @(Get-Process -Name 'KeyBeacon' -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return }
+    Say "Stopping $($procs.Count) running KeyBeacon instance(s) to release file locks"
+    foreach ($p in $procs) {
+        try { $p.CloseMainWindow() | Out-Null } catch {}
+    }
+    Start-Sleep -Milliseconds 800
+    foreach ($p in $procs) {
+        if (-not $p.HasExited) {
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+        }
+    }
+    OkM "Running instances stopped"
+}
+
 function Do-Build {
+    Stop-RunningClient
     Say "dotnet restore + build (Release)"
     $log = Join-Path $DiagDir 'build.log'
     $code = Invoke-Native 'dotnet' @('restore', $SlnPath) $log

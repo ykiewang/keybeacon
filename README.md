@@ -267,6 +267,7 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 | 左右半连接状态 | 分体某半掉线一眼可见 | 高——central 侧 peripheral 状态事件 | KBP 1.1 · 新增特征 |
 | 每半电量 | 知道该充哪一半 | 高——battery + peripheral battery 事件 | KBP 1.1 · 新增特征 |
 | 当前输出 | 键击去向 USB 还是 BLE | 高——选定端点 + 变更事件 | KBP 1.1 · 字段 / 特征 |
+| 每连接主机上下文 | 告诉*这台*电脑：键盘正在此打字，还是在另一台机上活跃——零配置 | 高——每连接 READ 解析发起主机的绑定槽位（[`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)） | 🚧 已实现待发布 · KBP 1.2 · AA4 `local_link_profile`（只读、每连接） |
 | 充电状态 | 某半是否在充电 | 低——多数板无充电检测引脚 | 可选 · 依赖硬件 |
 
 ### B. 输入与锁定状态

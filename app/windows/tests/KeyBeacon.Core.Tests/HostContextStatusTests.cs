@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using KeyBeacon.Core;
 using Xunit;
 
@@ -376,5 +377,47 @@ public class HostContextStatusTests
             HostContextStatus.DeriveLocalHostStatus(
                 hasAA4: false, connected: true, capability: Cap(hasOutputEndpoint: true),
                 activeProfile: Profile(1), localSlot: null, output: Usb));
+    }
+
+    // --- T045 [Phase 7]: HostStatusVisual five-state encoding (V-1/V-4) ---
+
+    [Fact]
+    public void Visual_Exhaustive_FiveStates()
+    {
+        // Colour + symbol single source of truth (host-status-visual.md V-1).
+        // Parity with macOS testVisual_exhaustive_fiveStates.
+        Assert.Equal(new HostStatusVisual(HostStatusColor.Green, "●"),
+            HostStatusVisual.For(LocalHostStatus.InUseHere));
+        Assert.Equal(new HostStatusVisual(HostStatusColor.Orange, "◐"),
+            HostStatusVisual.For(LocalHostStatus.ActiveElsewhere(3)));
+        Assert.Equal(new HostStatusVisual(HostStatusColor.Blue, "◆"),
+            HostStatusVisual.For(LocalHostStatus.OnUsb));
+        Assert.Equal(new HostStatusVisual(HostStatusColor.Gray, "○"),
+            HostStatusVisual.For(LocalHostStatus.CannotDetermine));
+        Assert.Equal(new HostStatusVisual(HostStatusColor.Red, "✕"),
+            HostStatusVisual.For(LocalHostStatus.Disconnected));
+    }
+
+    [Fact]
+    public void Visual_DisconnectedIsRed_NotGray_DistinctFromCannotDetermine()
+    {
+        // V-2.3: "not connected" reads as an alarm (red), never the grey unknown.
+        Assert.Equal(HostStatusColor.Red, HostStatusVisual.For(LocalHostStatus.Disconnected).Color);
+        Assert.NotEqual(HostStatusVisual.For(LocalHostStatus.Disconnected),
+            HostStatusVisual.For(LocalHostStatus.CannotDetermine));
+    }
+
+    [Fact]
+    public void Visual_ColoursAreUniquePerState()
+    {
+        var all = new[]
+        {
+            LocalHostStatus.InUseHere, LocalHostStatus.ActiveElsewhere(2),
+            LocalHostStatus.OnUsb, LocalHostStatus.CannotDetermine, LocalHostStatus.Disconnected,
+        };
+        var colors = all.Select(s => HostStatusVisual.For(s).Color).ToList();
+        Assert.Equal(all.Length, colors.Distinct().Count());
+        Assert.Equal(HostStatusColor.Blue, HostStatusVisual.For(LocalHostStatus.OnUsb).Color);
+        Assert.Equal(HostStatusColor.Orange, HostStatusVisual.For(LocalHostStatus.ActiveElsewhere(1)).Color);
     }
 }

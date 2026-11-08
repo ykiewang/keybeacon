@@ -55,6 +55,7 @@
 - macOS：`FloatingPanel.renderHostRow` 分支扩展；`L10n` 新增 5 key（英/中两表同加）。
 - Windows：`MainViewModel.ApplyConnectivity/ApplyCompact` 分支扩展；`Resources.resx` + `Resources.zh-CN.resx` 新增 5 key（同加）。
 - `activeElsewhere` 文案含 `P{N}`（N=active slot）。
+- **完整模式与精简模式 MUST 共用同一视觉编码**（颜色 + 符号 + 悬停文案），见 [host-status-visual.md](./host-status-visual.md)（FR-016）。精简模式无内联文字时，在 profile 指示点上编码五态；不得让精简模式丢失「是否在本机使用」。
 
 ## CF-7 更新时延（FR-006 / SC-001）
 
