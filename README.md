@@ -63,11 +63,14 @@ spec time. These are candidates, not commitments.
 
 ### A. Connectivity & power
 
-> **Status**: ✅ **Shipped in KBP 1.1** — released 2026-10-09.
-> Specification: [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md);
+> **Status**: ✅ **Shipped in KBP 1.1** — released 2026-10-09. **Per-link host context shipped in KBP 1.2** — released 2026-11-08.
+> Specification: [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md)
+> and [`specs/005-host-link-profile-awareness/spec.md`](specs/005-host-link-profile-awareness/spec.md);
 > firmware module: [`zmk-keybeacon@v1.1.2`](https://github.com/ykiewang/zmk-keybeacon/releases/tag/v1.1.2)
+> (KBP 1.1) / [`zmk-keybeacon@v1.2.0`](https://github.com/ykiewang/zmk-keybeacon/releases/tag/v1.2.0) (KBP 1.2)
 > ([CHANGELOG](https://github.com/ykiewang/zmk-keybeacon/blob/main/CHANGELOG.md));
-> normative wire contract: [`protocol/README.md §14`](protocol/README.md#14-kbp-11-connectivity--power-optional).
+> normative wire contract: [`protocol/README.md §14`](protocol/README.md#14-kbp-11-connectivity--power-optional)
+> and [`§15`](protocol/README.md#15-kbp-12-per-link-host-context-optional).
 
 | Metric | Status | Why it helps a screenless split | ZMK feasibility | Protocol impact |
 |--------|--------|---------------------------------|-----------------|-----------------|
@@ -76,7 +79,7 @@ spec time. These are candidates, not commitments.
 | Per-half link status | ✅ Shipped (v1.1) | a split half dropping offline is visible at a glance | High — proxied via `zmk_peripheral_battery_state_changed` + 75 s TTL (ZMK does not expose a central-side split-link API at commit `6b44d33d`) | KBP 1.1 · AA2 `split_flags` bits 0–1 |
 | Per-half battery | ✅ Shipped (v1.1) | know which half to charge | High — battery + peripheral-battery events (requires `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`) | KBP 1.1 · AA3 payload `[0]` / `[1]` |
 | Active output | ✅ Shipped (v1.1) | whether keystrokes go to USB or BLE | High — `zmk_endpoints_selected()` + change event | KBP 1.1 · AA2 `output_endpoint` byte |
-| Per-link host context | 🚧 Implemented, pending release (KBP 1.2) | tells *this* computer whether the keyboard is typing here vs active on another host — zero config | High — per-connection READ resolves the asking host's bonded slot ([`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)) | KBP 1.2 · AA4 `local_link_profile` (READ-only, per-connection) |
+| Per-link host context | ✅ Shipped (v1.2) | tells *this* computer whether the keyboard is typing here vs active on another host — zero config | High — per-connection READ resolves the asking host's bonded slot ([`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)) | KBP 1.2 · AA4 `local_link_profile` (READ-only, per-connection) |
 | Charging status | ⚠️ Protocol-defined; hardware-dependent (corne lacks a charge-detect GPIO, so capability bits 5–6 stay `0`) | whether a half is charging | Low — most boards lack a charge-detect pin | KBP 1.1 · AA2 `charging_flags` bits 0–1 (opt-in via capability bits) |
 
 ### B. Input & lock state
@@ -255,10 +258,12 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 
 ### A. 连接与电量
 
-> **状态**：**实施中**，对应 KBP 1.1 feature `001-connectivity-power`。规范：
-> [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md)；规范化
+> **状态**：✅ **KBP 1.1 已发布**（2026-10-09）；**KBP 1.2 每连接主机上下文已发布**（2026-11-08）。规范：
+> [`specs/001-connectivity-power/spec.md`](specs/001-connectivity-power/spec.md) 与
+> [`specs/005-host-link-profile-awareness/spec.md`](specs/005-host-link-profile-awareness/spec.md)；规范化
 > 线上契约：
-> [`protocol/README.md §14`](protocol/README.md#14-kbp-11-连接与电量可选特征)。
+> [`protocol/README.md §14`](protocol/README.md#14-kbp-11-连接与电量可选特征) 与
+> [`§15`](protocol/README.md#15-kbp-12-每连接主机上下文可选特征)。
 
 | 指标 | 对无屏分体的价值 | ZMK 可行性 | 协议影响 |
 |------|----------------|-----------|---------|
@@ -267,7 +272,7 @@ KeyBeacon 的下一步走向——一份面向无屏(尤其是无线分体)键�
 | 左右半连接状态 | 分体某半掉线一眼可见 | 高——central 侧 peripheral 状态事件 | KBP 1.1 · 新增特征 |
 | 每半电量 | 知道该充哪一半 | 高——battery + peripheral battery 事件 | KBP 1.1 · 新增特征 |
 | 当前输出 | 键击去向 USB 还是 BLE | 高——选定端点 + 变更事件 | KBP 1.1 · 字段 / 特征 |
-| 每连接主机上下文 | 告诉*这台*电脑：键盘正在此打字，还是在另一台机上活跃——零配置 | 高——每连接 READ 解析发起主机的绑定槽位（[`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)） | 🚧 已实现待发布 · KBP 1.2 · AA4 `local_link_profile`（只读、每连接） |
+| 每连接主机上下文 | 告诉*这台*电脑：键盘正在此打字，还是在另一台机上活跃——零配置 | 高——每连接 READ 解析发起主机的绑定槽位（[`specs/005-host-link-profile-awareness`](specs/005-host-link-profile-awareness/spec.md)） | ✅ 已发布 (v1.2) · KBP 1.2 · AA4 `local_link_profile`（只读、每连接） |
 | 充电状态 | 某半是否在充电 | 低——多数板无充电检测引脚 | 可选 · 依赖硬件 |
 
 ### B. 输入与锁定状态
