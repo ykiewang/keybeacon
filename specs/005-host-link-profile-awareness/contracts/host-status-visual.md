@@ -6,13 +6,13 @@
 
 ## V-1 编码表（单一真相源）
 
-| 状态 | 颜色 | 符号 | 点样式 | 完整模式文案 | 精简模式 | 无障碍 |
-|------|------|------|--------|--------------|----------|--------|
-| `inUseHere` | 绿 `systemGreen` | ● | 实心圆 | 正在此电脑使用 / In use on this computer | 绿实心点 + `P{N}` | 形状=实心 |
-| `activeElsewhere(slot:N)` | 橙 `systemOrange` | ◐ | 半填充 + 尾随 `▸P{N}` | 键盘正在另一台电脑使用(P{N}) / Keyboard active on another computer (P{N}) | 橙半填充点 + `P{active}` | 形状=半填充；数字给出目标 |
-| `onUsb` | 蓝 `systemBlue` | ◆ | 菱形 | 键盘在 USB 输出(非本 BLE 链路) / Keyboard on USB (not this BLE link) | 蓝菱形 + `USB` | 形状=菱形 |
-| `cannotDetermine` | 灰 `systemGray` | ○ | 空心圆 | 无法确定 / Cannot determine | 灰空心点 + `P{N}` | 形状=空心 |
-| `disconnected` | 红 `systemRed` | ✕ | 叉 | 未连接 / Disconnected | 红叉 + `—` | 形状=叉（区别于空心） |
+| 状态 | 颜色 | 符号 | 字形（颜色+形状合一） | 完整模式文案 | 精简模式 | 无障碍 |
+|------|------|------|------------------------|--------------|----------|--------|
+| `inUseHere` | 绿 `systemGreen` | ● | 绿色实心圆 | 正在此电脑使用 / In use on this computer | ● + `P{N}` | 形状=实心 |
+| `activeElsewhere(slot:N)` | 橙 `systemOrange` | ◐ | 橙色半填充圆 | 键盘正在另一台电脑使用(P{N}) / Keyboard active on another computer (P{N}) | ◐ + `P{active}` | 形状=半填充；数字给出目标 |
+| `onUsb` | 蓝 `systemBlue` | ◆ | 蓝色菱形 | 键盘在 USB 输出(非本 BLE 链路) / Keyboard on USB (not this BLE link) | ◆ + `USB` | 形状=菱形 |
+| `cannotDetermine` | 灰 `systemGray` | ○ | 灰色空心圆 | 无法确定 / Cannot determine | ○ + `P{N}` | 形状=空心 |
+| `disconnected` | 红 `systemRed` | ✕ | 红色叉 | 未连接 / Disconnected | ✕ + `—` | 形状=叉（区别于空心） |
 
 颜色分配理由：**绿=本机**（既有约定）、**橙=他机**（蓝已让给 USB，橙/绿对色盲更可分）、**蓝=USB**（既有）、**灰=未知**（既有）、**红=未连接**（比原灰色更醒目，符合「断开应是告警」直觉）。
 
@@ -24,6 +24,7 @@
 - **V-2.4 老固件回退**：未发现 AA4（老固件）→ 按 `cannotDetermine` 编码（灰空心），不臆造 in-use/elsewhere。
 - **V-2.5 陈旧态**：字段陈旧时沿用既有 alpha 0.5 淡化；陈旧不改变颜色/符号语义。
 - **V-2.6 parity**：macOS `HostStatusVisual` 与 Windows `HostStatusVisual` 的颜色集合、符号字符、映射分支逐条对齐；测试用例一一对应。
+- **V-2.7 单一字形（禁止叠加）**：指示器 MUST 是**一个**同时承载颜色与形状的彩色字形（`●◐◆○✕`），**禁止**再叠加一个纯色实心圆点。理由：字形本身已是圆形/形状，再加圆点会渲染成「一个实心点 + 一个符号」两个视觉元素，用户会误读为两种状态（实测缺陷：橙实心点 + 橙半填充符号）。形状差异（实心/半填充/菱形/空心/叉）已由字形本身表达，无需额外几何体。
 
 ## V-3 精简模式信息预算
 

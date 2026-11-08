@@ -80,8 +80,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool ShowHostStatus { get => _showHostStatus; private set => Set(ref _showHostStatus, value); }
     private string _hostStatusText = string.Empty;
     public string HostStatusText { get => _hostStatusText; private set => Set(ref _hostStatusText, value); }
-    private Brush _hostStatusDot = DotGray;
-    public Brush HostStatusDot { get => _hostStatusDot; private set => Set(ref _hostStatusDot, value); }
+    // Single coloured glyph carries BOTH colour and shape (●◐◆○✕) — no
+    // separate dot (that read as two dots). See host-status-visual.md V-1.
     private string _hostStatusSymbol = string.Empty;
     public string HostStatusSymbol { get => _hostStatusSymbol; private set => Set(ref _hostStatusSymbol, value); }
     private Brush _hostStatusSymbolBrush = DotGray;
@@ -100,13 +100,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _compactLayer = string.Empty;
     public string CompactLayer { get => _compactLayer; private set => Set(ref _compactLayer, value); }
 
-    // Host segment: "│ ● P1". Dot colour green=connected / grey=offline.
+    // Host segment: "│ ● P1". A single coloured glyph carries colour + shape.
     private bool _showCompactHost;
     public bool ShowCompactHost { get => _showCompactHost; private set => Set(ref _showCompactHost, value); }
     private bool _compactHostDotVisible;
     public bool CompactHostDotVisible { get => _compactHostDotVisible; private set => Set(ref _compactHostDotVisible, value); }
-    private Brush _compactHostDot = DotGray;
-    public Brush CompactHostDot { get => _compactHostDot; private set => Set(ref _compactHostDot, value); }
     private string _compactHostSymbol = string.Empty;
     public string CompactHostSymbol { get => _compactHostSymbol; private set => Set(ref _compactHostSymbol, value); }
     private Brush _compactHostSymbolBrush = DotGray;
@@ -243,16 +241,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (s.HostStatus is { } hostStatus)
         {
             var visual = HostStatusVisual.For(hostStatus);
-            CompactHostDot = HostBrush(visual.Color);
             CompactHostSymbol = visual.Symbol;
             CompactHostSymbolBrush = HostBrush(visual.Color);
         }
         else if (cap.HasHostConnection)
         {
             // No per-link signal yet (old firmware / pre-AA4): fall back to the
-            // link-level dot; status is effectively cannot-determine.
+            // link-level glyph; status is effectively cannot-determine.
             var connected = conn.HostState.Connected;
-            CompactHostDot = connected ? DotGreen : DotGray;
             CompactHostSymbol = connected ? "●" : "○";
             CompactHostSymbolBrush = connected ? DotGreen : DotGray;
         }
@@ -425,7 +421,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // visually distinct from the grey cannot-determine. Parity with macOS
         // renderLocalHostRow.
         var visual = HostStatusVisual.For(hs);
-        HostStatusDot = HostBrush(visual.Color);
         HostStatusSymbol = visual.Symbol;
         HostStatusSymbolBrush = HostBrush(visual.Color);
         HostStatusText = hs.Kind switch
