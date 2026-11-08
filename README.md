@@ -10,11 +10,35 @@ implements the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
 
 ## Screenshots
 
-The floating status panel updates live as you switch layers. Here it is across the Totem's layers:
+The floating panel shows your keyboard's live state — active layer, held modifiers,
+connectivity, and per-half battery — and updates as you type. A **per-link host
+indicator** (new in KBP 1.2) tells *this* computer whether the keyboard is typing
+here (green ●), is active on another paired computer (orange ◐), or has dropped its
+link to this host (grey ○).
 
-| Base | Navigation | Symbols | Adjust |
-|:---:|:---:|:---:|:---:|
-| ![Base layer](photos/float-window/base-layer.png) | ![Navigation layer](photos/float-window/navi-layer.png) | ![Symbol layer](photos/float-window/sym-layer.png) | ![Adjust layer](photos/float-window/adj-layer.png) |
+### Full display mode
+
+| In use on **this** computer | Active on **another** computer | Link to this host down |
+|:---:|:---:|:---:|
+| ![Full mode — in use on this computer](photos/macos-full-this-connected.png) | ![Full mode — active on another computer, profile 2](photos/macos-full-other-connected.png) | ![Full mode — cannot determine, disconnected from this host](photos/macos-full-this-disconnected.png) |
+
+### Compact display mode
+
+The same state folded into one menu-bar-width strip — layer · modifiers · host ·
+profile · per-half battery · output:
+
+| Host state | |
+|:---|:---|
+| **In use here** — green `● P1` | ![Compact mode — in use on this computer](photos/macos-compact-this-connected.png) |
+| **Active elsewhere** — orange `◐ P2` | ![Compact mode — active on another computer](photos/macos-compact-other-connected.png) |
+| **Link down** — grey `○ P4` | ![Compact mode — disconnected from this host](photos/macos-compact-this-disconnected.png) |
+
+### Menu bar
+
+Reconnect, toggle the floating panel, lock / click-through, pin to a corner, switch
+display mode, or change language:
+
+![Menu bar menu](photos/menu.png)
 
 ## Why KeyBeacon
 
@@ -213,11 +237,31 @@ or app may implement it.
 
 ## 界面预览
 
-悬浮状态面板会随你切换层而实时更新。下面是 Totem 各层下的样子:
+悬浮面板实时显示键盘状态 —— 当前层、按住的修饰键、连接状态与左右半电量 —— 并随你打字更新。
+其中的**每连接主机指示**（KBP 1.2 新增）会告诉*这台*电脑：键盘正在此打字（绿 ●）、在另一台
+已配对电脑上活跃（橙 ◐），还是与本机的链路已断开（灰 ○）。
 
-| 基础层 | 导航层 | 符号层 | 调节层 |
-|:---:|:---:|:---:|:---:|
-| ![基础层](photos/float-window/base-layer.png) | ![导航层](photos/float-window/navi-layer.png) | ![符号层](photos/float-window/sym-layer.png) | ![调节层](photos/float-window/adj-layer.png) |
+### 完整模式
+
+| 正在**此**电脑使用 | 在**另一台**电脑使用 | 与本机链路断开 |
+|:---:|:---:|:---:|
+| ![完整模式 — 正在此电脑使用](photos/macos-full-this-connected.png) | ![完整模式 — 在另一台电脑使用(P2)](photos/macos-full-other-connected.png) | ![完整模式 — 无法确定/已断开](photos/macos-full-this-disconnected.png) |
+
+### 精简模式
+
+同一状态折叠进一条菜单栏宽度的横条 —— 层 · 修饰键 · 主机 · profile · 左右半电量 · 输出:
+
+| 主机状态 | |
+|:---|:---|
+| **本机在用** — 绿 `● P1` | ![精简模式 — 正在此电脑使用](photos/macos-compact-this-connected.png) |
+| **他机在用** — 橙 `◐ P2` | ![精简模式 — 在另一台电脑使用](photos/macos-compact-other-connected.png) |
+| **链路断开** — 灰 `○ P4` | ![精简模式 — 与本机断开](photos/macos-compact-this-disconnected.png) |
+
+### 菜单栏
+
+重新连接、显示/隐藏悬浮面板、锁定 / 点击穿透、吸附到屏角、切换显示模式、切换语言:
+
+![菜单栏](photos/menu.png)
 
 ## 初衷与愿景
 
