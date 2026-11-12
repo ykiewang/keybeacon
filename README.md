@@ -1,6 +1,6 @@
 # KeyBeacon
 
-**English** · [中文](#zh)
+**English** · [中文](#zh) · [**Website** ↗](https://ykiewang.github.io/keybeacon/)
 
 <a id="en"></a>
 
@@ -240,7 +240,7 @@ or app may implement it.
 
 # KeyBeacon(中文)
 
-[English](#en) · **中文**
+[English](#en) · **中文** · [**网站** ↗](https://ykiewang.github.io/keybeacon/)
 
 **KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与
 **按住的修饰键**。它适用于任何实现了开放的 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
