@@ -1,42 +1,32 @@
 <!--
-SYNC IMPACT REPORT (temporary; remove before committing the amended constitution)
+SYNC IMPACT REPORT
 =================================================================================
-Version change: [blank template placeholders] → 1.1.0
-Bump rationale: The committed file had been reset to the unfilled scaffold. This
-  amendment re-instantiates the full governance document. Relative to the current
-  (empty) baseline this ADDS six principles plus three governance sections, i.e. a
-  MINOR expansion of materially new guidance (per operator decision 2026-10-24).
-  Principle names/semantics match the "v1.0.0" referenced throughout specs/001 and
-  specs/002 Constitution Checks, reconstructed from those citations (.specify/ is
-  not version-controlled, so the prior file text was unrecoverable from git).
+Version change: 1.1.0 → 1.2.0
+Bump rationale: MINOR — Principle VI (Bilingual Normative Docs) is materially
+  relaxed for the repository root README only. The two languages MAY now live in
+  mirrored sibling files (README.md + README.zh-CN.md) that link to each other,
+  instead of being forced side-by-side inside a single file. All other normative
+  documents still require same-file side-by-side presentation, and the substantive
+  mirror requirements (full translation, stable RFC 2119 term mapping) are
+  unchanged. Motivated by a README restructure (2026-11-15) that splits the former
+  443-line bilingual root README into an English README.md + 中文 README.zh-CN.md
+  and moves the roadmap catalogue to docs/ROADMAP.md.
 
-Modified principles (placeholder → concrete):
-  [PRINCIPLE_1_NAME] → I. Wire-Contract Self-Containment
-  [PRINCIPLE_2_NAME] → II. Backward Compatibility is Non-Negotiable
-  [PRINCIPLE_3_NAME] → III. Identity From Protocol, Not Branding
-  [PRINCIPLE_4_NAME] → IV. Observable Degradation Over Guessing
-  [PRINCIPLE_5_NAME] → V. Spec-First Development (NON-NEGOTIABLE)
-  (added sixth)      → VI. Bilingual Normative Docs
+Modified principles:
+  VI. Bilingual Normative Docs — root README may now use cross-file mirrors.
 
-Added sections:
-  - Platform Scope & Delivery (was [SECTION_2_NAME])
-  - Testing & Verification Discipline (was [SECTION_3_NAME])
-  - Governance (instantiated from the GOVERNANCE_RULES placeholder)
-
-Removed sections: none (all template placeholders replaced).
+Added sections: none.
+Removed sections: none.
 
 Templates / artefacts consistency:
-  ✅ specs/001-connectivity-power/plan.md  — references 6 principles + Testing
-     Discipline + Governance; consistent with this document.
-  ✅ specs/002-zmk-keybeacon-kbp11/plan.md — "6 principles + Platform Scope +
-     Testing Discipline + Governance"; consistent.
-  ✅ conformance/tests/test_payload_parsing.py / test_us4_fields.py — quote the
-     Testing & Verification Discipline clause verbatim; consistent.
-  ⚠ .specify/templates/plan-template.md — contains a generic "Constitution Check"
-     gate; no principle-name coupling, no update required.
+  ✅ README.md + README.zh-CN.md — mirrored sibling files, cross-linked at the top.
+  ✅ docs/ROADMAP.md — new; a non-normative working document, exempt from Principle VI.
+  ✅ protocol/README.md, protocol/CHANGELOG.md, conformance/CONFORMANCE.md,
+     conformance/checklist.md — unchanged; still same-file side-by-side.
+  ⚠ .specify/templates/plan-template.md — generic "Constitution Check" gate; no
+     principle-name coupling, no update required.
 
-Deferred / TODO: none. RATIFICATION_DATE resolved to 2026-10-06 (earliest
-  traceable adoption evidence) per operator decision.
+Deferred / TODO: none.
 =================================================================================
 -->
 
@@ -108,10 +98,13 @@ it with analysis before code — is what keeps the wire format deliberate rather
 ### VI. Bilingual Normative Docs
 
 Every normative public document — `protocol/README.md`, `protocol/CHANGELOG.md`,
-`conformance/CONFORMANCE.md`, `conformance/checklist.md`, and the repository root `README.md` — MUST
-present English and 中文 side-by-side. The 中文 text MUST be a full mirror of the English, not a
-summary, and MUST render the RFC 2119 terms stably: MUST → 必须, SHOULD → 应, MAY → 可.
-Repository-internal working documents (e.g. files under `specs/*/contracts/`) are exempt.
+`conformance/CONFORMANCE.md`, and `conformance/checklist.md` — MUST present English and 中文
+side-by-side **within the same file**. The repository root README MAY instead split the two
+languages into mirrored sibling files (`README.md` for English and `README.zh-CN.md` for 中文) that
+link to each other at the top; when split, each file MUST remain a complete document, not a partial
+one. In every case the 中文 text MUST be a full mirror of the English, not a summary, and MUST
+render the RFC 2119 terms stably: MUST → 必须, SHOULD → 应, MAY → 可. Repository-internal working
+documents (e.g. files under `specs/*/contracts/`) are exempt.
 
 **Rationale**: The standard targets a global audience of keyboard and app authors. A partial or
 drifting translation would create two subtly different contracts; a full mirror keeps one.
@@ -151,4 +144,4 @@ This constitution supersedes ad-hoc convention; where guidance conflicts, the co
 - **Runtime guidance** for day-to-day work lives in `AGENTS.md` and the per-feature `plan.md`
   Constitution Check sections, which MUST stay consistent with the principles above.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-06 | **Last Amended**: 2026-10-24
+**Version**: 1.2.0 | **Ratified**: 2026-10-06 | **Last Amended**: 2026-11-15
