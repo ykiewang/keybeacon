@@ -4,9 +4,55 @@
 
 <a id="en"></a>
 
-**KeyBeacon** shows your keyboard's live internal state — the **active layer** and the **held
-modifier keys** — in a small desktop app, over Bluetooth LE. It works with any keyboard that
-implements the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
+**KeyBeacon** is built for **ZMK** keyboards — above all the screenless wireless splits (the Totem
+among them) where there is no on-device way to see what the board is doing. It shows your keyboard's
+live internal state — the **active layer**, **held modifier keys**, connectivity, and per-half
+battery — in a small desktop app, over Bluetooth LE. ZMK is the first-class target: one entry in
+`west.yml` plus one Kconfig symbol and you're done.
+
+The underlying open **KeyBeacon Protocol (KBP)** is deliberately **not** ZMK-specific, though. Any
+keyboard or firmware that speaks KBP can drive the same app — **ZMK is simply where it works today,
+with the least setup**, and the protocol is designed to extend to any keyboard over time.
+
+## Why KeyBeacon
+
+Many ZMK keyboards — the Totem among them — have **no screen**. You press a layer key and have no
+on-device way to confirm which layer is actually active. The usual answer is to add hardware: a
+small OLED/display, extra wiring, extra firmware, extra cost.
+
+KeyBeacon takes the opposite approach. The host your keyboard is already connected to **has** a
+screen, so let the software show the state instead of bolting on hardware. The keyboard simply
+reports what it knows over its existing BLE link, and the desktop app displays it. **No extra
+hardware, no screen, no soldering** — a displayless keyboard gains a display for free.
+
+**Vision**: start with layer + modifiers, but grow into a **general-purpose window into a keyboard's
+internal state**. The protocol is versioned and extensible by design, so future versions can surface
+more of what the keyboard knows but can't otherwise show — e.g. battery level, active output/profile,
+connection status, caps-word/sticky state — for **any** keyboard that speaks KBP, on any OS.
+
+This repository is the **home of the project**:
+
+| Directory | What |
+|-----------|------|
+| [`app/macos/`](app/macos/) | The macOS app (menu-bar widget + floating status panel). |
+| [`app/windows/`](app/windows/) | The Windows app (system tray + floating status panel). |
+| [`protocol/`](protocol/) | The authoritative, versioned **KeyBeacon Protocol** standard (KBP). |
+| [`conformance/`](conformance/) | The **conformance kit** — guide + checklist + self-test tool for keyboard authors. |
+
+> **Platform status**: macOS and Windows are available now. **Linux is planned for the next
+> iteration.** The protocol is OS-neutral by design.
+
+## Supported ZMK configs
+
+Ready-to-flash ZMK configs with KeyBeacon already wired in:
+
+| Config | Keyboard | Notes |
+|--------|----------|-------|
+| [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem (38-key screenless split) | The reference integration — start here. |
+| [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne (CRKBD) | Integration lives on the `feat/keybeacon` branch. |
+
+Built KeyBeacon into your own board? **Contributions are welcome** — open an issue or PR on this
+repo with your config, and we'll add it to the list.
 
 ## Screenshots
 
@@ -39,34 +85,6 @@ Reconnect, toggle the floating panel, lock / click-through, pin to a corner, swi
 display mode, or change language:
 
 ![Menu bar menu](photos/menu.png)
-
-## Why KeyBeacon
-
-Many ZMK keyboards — the Totem among them — have **no screen**. You press a layer key and have no
-on-device way to confirm which layer is actually active. The usual answer is to add hardware: a
-small OLED/display, extra wiring, extra firmware, extra cost.
-
-KeyBeacon takes the opposite approach. The host your keyboard is already connected to **has** a
-screen, so let the software show the state instead of bolting on hardware. The keyboard simply
-reports what it knows over its existing BLE link, and the desktop app displays it. **No extra
-hardware, no screen, no soldering** — a displayless keyboard gains a display for free.
-
-**Vision**: start with layer + modifiers, but grow into a **general-purpose window into a keyboard's
-internal state**. The protocol is versioned and extensible by design, so future versions can surface
-more of what the keyboard knows but can't otherwise show — e.g. battery level, active output/profile,
-connection status, caps-word/sticky state — for **any** keyboard that speaks KBP, on any OS.
-
-This repository is the **home of three things**:
-
-| Directory | What |
-|-----------|------|
-| [`app/macos/`](app/macos/) | The macOS app (menu-bar widget + floating status panel). |
-| [`app/windows/`](app/windows/) | The Windows app (system tray + floating status panel). |
-| [`protocol/`](protocol/) | The authoritative, versioned **KeyBeacon Protocol** standard (KBP). |
-| [`conformance/`](conformance/) | The **conformance kit** — guide + checklist + self-test tool for keyboard authors. |
-
-> **Platform status**: macOS and Windows are available now. **Linux is planned for the next
-> iteration.** The protocol is OS-neutral by design.
 
 ## Interface language
 
@@ -242,8 +260,48 @@ or app may implement it.
 
 [English](#en) · **中文** · [**网站** ↗](https://ykiewang.github.io/keybeacon/)
 
-**KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与
-**按住的修饰键**。它适用于任何实现了开放的 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
+**KeyBeacon** 为 **ZMK** 键盘而做 —— 尤其是没有屏幕的无线分体键盘（比如 Totem），它们在键盘
+本体上根本无法一眼看清当前状态。它在桌面小应用里，通过蓝牙 LE 实时显示键盘的内部状态：**当前层**、
+**按住的修饰键**、连接状态与左右半电量。ZMK 是首选目标：在 `west.yml` 加一条、再打开一个 Kconfig
+符号即可接入。
+
+而底层开放的 **KeyBeacon 协议（KBP）** 刻意**不绑定** ZMK —— 任何实现 KBP 的键盘或固件都能驱动
+同一个应用。**ZMK 只是目前开箱即用、接入成本最低的那一个**，协议在设计上会逐步扩展到任意键盘。
+
+## 初衷与愿景
+
+很多 ZMK 键盘 —— 比如 Totem —— **没有屏幕**。你按下层切换键,却无法在键盘本体上确认当前究竟在哪一
+层。常见的解法是加硬件:一小块 OLED/显示屏、额外走线、额外固件、额外成本。
+
+KeyBeacon 反其道而行。你的键盘本就连着的那台电脑**有**屏幕,那就用软件来显示状态,而不是再外挂一块
+硬件。键盘只需把自己知道的信息通过既有的 BLE 链路上报,桌面应用负责显示。**不需要额外硬件、不需要
+屏幕、不需要焊接** —— 一把没有显示屏的键盘,就这样免费获得了"显示屏"。
+
+**愿景**:从"层 + 修饰键"起步,逐步成长为一个**通用的键盘内部状态窗口**。协议在设计上即是带版本、
+可扩展的,因此未来版本可以呈现更多键盘已知、却无从展示的信息 —— 例如电量、当前输出/配置、连接状态、
+Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操作系统。
+
+本仓库是**本项目的归属地**:
+
+| 目录 | 内容 |
+|------|------|
+| [`app/macos/`](app/macos/) | macOS 应用(菜单栏小组件 + 悬浮状态面板)。 |
+| [`app/windows/`](app/windows/) | Windows 应用(系统托盘 + 悬浮状态面板)。 |
+| [`protocol/`](protocol/) | 权威、带版本的 **KeyBeacon 协议** 标准(KBP)。 |
+| [`conformance/`](conformance/) | **一致性套件** —— 面向键盘作者的指南 + 清单 + 自测工具。 |
+
+> **平台状态**:macOS 与 Windows 现已可用。**Linux 顺延至下一期**。协议在设计上与操作系统无关。
+
+## 支持的 ZMK 配置
+
+已经接入 KeyBeacon、可直接刷入的 ZMK 配置：
+
+| 配置 | 键盘 | 说明 |
+|------|------|------|
+| [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem（38 键无屏分体） | 参考实现 —— 建议从这里开始。 |
+| [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne（CRKBD） | 集成在 `feat/keybeacon` 分支上。 |
+
+你的板子也接好了 KeyBeacon？**欢迎提交** —— 在本仓库开 issue 或 PR 附上你的配置，我们把它加进列表。
 
 ## 界面预览
 
@@ -272,30 +330,6 @@ or app may implement it.
 重新连接、显示/隐藏悬浮面板、锁定 / 点击穿透、吸附到屏角、切换显示模式、切换语言:
 
 ![菜单栏](photos/menu.png)
-
-## 初衷与愿景
-
-很多 ZMK 键盘 —— 比如 Totem —— **没有屏幕**。你按下层切换键,却无法在键盘本体上确认当前究竟在哪一
-层。常见的解法是加硬件:一小块 OLED/显示屏、额外走线、额外固件、额外成本。
-
-KeyBeacon 反其道而行。你的键盘本就连着的那台电脑**有**屏幕,那就用软件来显示状态,而不是再外挂一块
-硬件。键盘只需把自己知道的信息通过既有的 BLE 链路上报,桌面应用负责显示。**不需要额外硬件、不需要
-屏幕、不需要焊接** —— 一把没有显示屏的键盘,就这样免费获得了"显示屏"。
-
-**愿景**:从"层 + 修饰键"起步,逐步成长为一个**通用的键盘内部状态窗口**。协议在设计上即是带版本、
-可扩展的,因此未来版本可以呈现更多键盘已知、却无从展示的信息 —— 例如电量、当前输出/配置、连接状态、
-Caps-Word/黏滞键状态 —— 面向**任何**讲 KBP 的键盘、任何操作系统。
-
-本仓库是**三样东西的归属地**:
-
-| 目录 | 内容 |
-|------|------|
-| [`app/macos/`](app/macos/) | macOS 应用(菜单栏小组件 + 悬浮状态面板)。 |
-| [`app/windows/`](app/windows/) | Windows 应用(系统托盘 + 悬浮状态面板)。 |
-| [`protocol/`](protocol/) | 权威、带版本的 **KeyBeacon 协议** 标准(KBP)。 |
-| [`conformance/`](conformance/) | **一致性套件** —— 面向键盘作者的指南 + 清单 + 自测工具。 |
-
-> **平台状态**:macOS 与 Windows 现已可用。**Linux 顺延至下一期**。协议在设计上与操作系统无关。
 
 ## 界面语言
 
