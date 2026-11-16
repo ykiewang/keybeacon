@@ -2,10 +2,33 @@
 
 [English](README.md) · **中文** · [**网站** ↗](https://ykiewang.github.io/keybeacon/)
 
-**KeyBeacon** 在一个小巧的桌面应用里,通过蓝牙 LE 实时显示键盘的内部状态 —— **当前层**与**按住
-的修饰键**。它适用于任何实现了开放 **KeyBeacon 协议(KBP)** 的键盘,而不限某一品牌或型号。
+**KeyBeacon** 为 **ZMK** 键盘而做 —— 尤其是没有屏幕的无线分体键盘（比如 Totem），它们在键盘
+本体上根本无法一眼看清当前状态。它在桌面小应用里，通过蓝牙 LE 实时显示键盘的内部状态：**当前层**、
+**按住的修饰键**、连接状态与左右半电量。ZMK 是首选目标：在 `west.yml` 加一条、再打开一个 Kconfig
+符号即可接入。
+
+而底层开放的 **KeyBeacon 协议（KBP）** 刻意**不绑定** ZMK —— 任何实现 KBP 的键盘或固件都能驱动
+同一个应用。**ZMK 只是目前开箱即用、接入成本最低的那一个**，协议在设计上会逐步扩展到任意键盘。
 
 ![KeyBeacon 悬浮面板 —— 实时显示当前层与修饰键](photos/macos-full-this-connected.png)
+
+## 为什么是 KeyBeacon
+
+很多 ZMK 键盘 —— 比如 Totem —— **没有屏幕**:你按下层切换键,却无法在键盘本体上确认当前在哪一层。
+常见解法是外挂硬件(一块 OLED、走线、固件、成本)。KeyBeacon 反其道而行 —— 你的键盘本就连着的
+那台电脑**有**屏幕,那就用软件来显示状态。**不需要额外硬件、不需要焊接。** 它从"层 + 修饰键"
+起步,并被设计为逐步成长为一个通用的键盘内部状态窗口,建立在带版本、可扩展的协议之上。
+
+## 支持的 ZMK 配置
+
+已经接入 KeyBeacon、可直接刷入的 ZMK 配置：
+
+| 配置 | 键盘 | 说明 |
+|------|------|------|
+| [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem（38 键无屏分体） | 参考实现 —— 建议从这里开始。 |
+| [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne（CRKBD） | 集成在 `feat/keybeacon` 分支上。 |
+
+你的板子也接好了 KeyBeacon？**欢迎提交** —— 在本仓库开 issue 或 PR 附上你的配置，我们把它加进列表。
 
 ## 快速上手
 
@@ -61,13 +84,6 @@
 ![菜单栏](photos/menu.png)
 
 </details>
-
-## 为什么是 KeyBeacon
-
-很多 ZMK 键盘 —— 比如 Totem —— **没有屏幕**:你按下层切换键,却无法在键盘本体上确认当前在哪一层。
-常见解法是外挂硬件(一块 OLED、走线、固件、成本)。KeyBeacon 反其道而行 —— 你的键盘本就连着的
-那台电脑**有**屏幕,那就用软件来显示状态。**不需要额外硬件、不需要焊接。** 它从"层 + 修饰键"
-起步,并被设计为逐步成长为一个通用的键盘内部状态窗口,建立在带版本、可扩展的协议之上。
 
 ## 本仓库包含什么
 

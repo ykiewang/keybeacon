@@ -2,11 +2,38 @@
 
 **English** · [中文](README.zh-CN.md) · [**Website** ↗](https://ykiewang.github.io/keybeacon/)
 
-**KeyBeacon** shows your keyboard's live internal state — the **active layer** and **held
-modifiers** — in a small desktop app, over Bluetooth LE. It works with **any** keyboard that
-speaks the open **KeyBeacon Protocol (KBP)**, not just one brand or model.
+**KeyBeacon** is built for **ZMK** keyboards — above all the screenless wireless splits (the Totem
+among them) where there's no on-device way to see what the board is doing. It shows your keyboard's
+live internal state — the **active layer**, **held modifiers**, connectivity, and per-half battery —
+in a small desktop app, over Bluetooth LE. ZMK is the first-class target: add one entry to
+`west.yml`, set one Kconfig symbol, done.
+
+The underlying open **KeyBeacon Protocol (KBP)** is deliberately **not** ZMK-specific, so any
+keyboard or firmware that speaks KBP can drive the same app — **ZMK is simply where it works today,
+with the least setup**, and the protocol is designed to extend to any keyboard over time.
 
 ![KeyBeacon floating panel showing live layer and modifier state](photos/macos-full-this-connected.png)
+
+## Why KeyBeacon
+
+Many ZMK keyboards — the Totem among them — have **no screen**: you press a layer key with no
+on-device way to confirm which layer is active. The usual fix is to bolt on hardware (an OLED,
+wiring, firmware, cost). KeyBeacon does the opposite — the host your keyboard is already connected
+to **has** a screen, so let the software show the state. **No extra hardware, no soldering.** It
+starts with layer + modifiers and is built to grow into a general-purpose window into any
+keyboard's internal state, over a versioned, extensible protocol.
+
+## Supported ZMK configs
+
+Ready-to-flash ZMK configs with KeyBeacon already wired in:
+
+| Config | Keyboard | Notes |
+|--------|----------|-------|
+| [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem (38-key screenless split) | The reference integration — start here. |
+| [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne (CRKBD) | Integration lives on the `feat/keybeacon` branch. |
+
+Built KeyBeacon into your own board? **Contributions are welcome** — open an issue or PR on this
+repo with your config, and we'll add it to the list.
 
 ## Quick start
 
@@ -67,15 +94,6 @@ or change language:
 ![Menu bar menu](photos/menu.png)
 
 </details>
-
-## Why KeyBeacon
-
-Many ZMK keyboards — the Totem among them — have **no screen**: you press a layer key with no
-on-device way to confirm which layer is active. The usual fix is to bolt on hardware (an OLED,
-wiring, firmware, cost). KeyBeacon does the opposite — the host your keyboard is already connected
-to **has** a screen, so let the software show the state. **No extra hardware, no soldering.** It
-starts with layer + modifiers and is built to grow into a general-purpose window into any
-keyboard's internal state, over a versioned, extensible protocol.
 
 ## What's in this repo
 
