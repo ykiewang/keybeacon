@@ -31,6 +31,7 @@ Ready-to-flash ZMK configs with KeyBeacon already wired in:
 |--------|----------|-------|
 | [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem (38-key screenless split) | The reference integration — start here. |
 | [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne (CRKBD) | Integration lives on the `feat/keybeacon` branch. |
+| [`zmk-config-adept`](https://github.com/ykiewang/zmk-config-adept/tree/feat/keybeacon) | Kai Adept (unibody trackball) | Integration lives on the `feat/keybeacon` branch — the unibody reference. |
 
 Built KeyBeacon into your own board? **Contributions are welcome** — open an issue or PR on this
 repo with your config, and we'll add it to the list.
