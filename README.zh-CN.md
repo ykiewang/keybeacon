@@ -27,6 +27,7 @@
 |------|------|------|
 | [`zmk-config-totem`](https://github.com/ykiewang/zmk-config-totem#keybeacon-layer--modifier-status-over-ble) | Totem（38 键无屏分体） | 参考实现 —— 建议从这里开始。 |
 | [`zmk-config-corne`](https://github.com/YkieWang/zmk-config-corne/tree/feat/keybeacon) | Corne（CRKBD） | 集成在 `feat/keybeacon` 分支上。 |
+| [`zmk-config-adept`](https://github.com/ykiewang/zmk-config-adept/tree/feat/keybeacon) | Kai Adept（一体式轨迹球） | 集成在 `feat/keybeacon` 分支上 —— 一体式参考实现。 |
 
 你的板子也接好了 KeyBeacon？**欢迎提交** —— 在本仓库开 issue 或 PR 附上你的配置，我们把它加进列表。
 
