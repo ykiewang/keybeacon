@@ -3,6 +3,7 @@
 
 import AppKit
 import BleWidgetCore
+import Carbon
 
 final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     private var statusItem: NSStatusItem!
@@ -43,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         client.start()
 
         hotkeyRegistrar.register(
-            modifiers: UInt32(cmdKey | shiftKey),
+            modifiers: UInt32(0x0100 | 0x0200),
             keyCode: 40
         ) { [weak self] in
             self?.showKeymapPanel()
