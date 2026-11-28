@@ -36,6 +36,7 @@ public protocol BLEClientDelegate: AnyObject {
     /// `nil` means the keyboard exposes no `AA440AA4-…` (old firmware) or the
     /// link is down → the host hides the per-link row (no new UI, CF-8).
     func bleClient(_ client: BLEClient, didUpdateHostStatus status: LocalHostStatus?)
+    func bleClient(_ client: BLEClient, didUpdateKeymapAvailability supported: Bool)
 }
 
 public extension BLEClientDelegate {
@@ -46,14 +47,17 @@ public extension BLEClientDelegate {
     func bleClient(_ client: BLEClient, didUpdateBattery status: BatteryStatus) {}
     func bleClient(_ client: BLEClient, didDetermineKBPMinor minor: KBPMinor) {}
     func bleClient(_ client: BLEClient, didUpdateHostStatus status: LocalHostStatus?) {}
+    func bleClient(_ client: BLEClient, didUpdateKeymapAvailability supported: Bool) {}
 }
 
 /// Declared MINOR of the currently connected keyboard, derived from GATT
 /// characteristic presence (per protocol/README.md §14.5).
 public enum KBPMinor: Equatable {
-    case onePointZero                      // only AA440AA1-… found
-    case onePointOne(hasBattery: Bool)     // AA440AA2-… present; AA440AA3-… optional
-    case unknown                           // characteristic discovery incomplete / anomalous
+    case onePointZero
+    case onePointOne(hasBattery: Bool)
+    case onePointTwo
+    case onePointThree
+    case unknown
 }
 
 public final class BLEClient: NSObject {
@@ -72,6 +76,12 @@ public final class BLEClient: NSObject {
     public static let linkSlotCharacteristicUUID = CBUUID(
         string: "AA440AA4-F5ED-4C48-84A1-8062D20D3D55"
     )
+    public static let keymapMetaCharacteristicUUID = CBUUID(
+        string: "AA440AA5-F5ED-4C48-84A1-8062D20D3D55"
+    )
+    public static let keymapDataCharacteristicUUID = CBUUID(
+        string: "AA440AA6-F5ED-4C48-84A1-8062D20D3D55"
+    )
     private static let hidServiceUUID = CBUUID(string: "1812")
 
     public weak var delegate: BLEClientDelegate?
@@ -85,6 +95,8 @@ public final class BLEClient: NSObject {
     private var connectivityCharacteristic: CBCharacteristic?
     private var batteryCharacteristic: CBCharacteristic?
     private var linkSlotCharacteristic: CBCharacteristic?
+    private var keymapMetaCharacteristic: CBCharacteristic?
+    private var keymapDataCharacteristic: CBCharacteristic?
     private var activeKeyboard: CompatibleKeyboard?
 
     // Cache of the current CapabilityMatrix for the active keyboard (parsed
@@ -129,6 +141,14 @@ public final class BLEClient: NSObject {
         central = CBCentralManager(delegate: self, queue: .main)
     }
 
+    public func makeKeymapFetcher() -> KeymapDataFetcher {
+        KeymapDataFetcher(
+            peripheral: peripheral,
+            metaCharacteristic: keymapMetaCharacteristic,
+            dataCharacteristic: keymapDataCharacteristic
+        )
+    }
+
     public func start() {
         attemptConnect()
     }
@@ -144,6 +164,8 @@ public final class BLEClient: NSObject {
             connectivityCharacteristic = nil
             batteryCharacteristic = nil
             linkSlotCharacteristic = nil
+            keymapMetaCharacteristic = nil
+            keymapDataCharacteristic = nil
             cachedCapability = nil
             latestConnectivity = nil
             linkSlotCache.reset()
@@ -225,13 +247,14 @@ public final class BLEClient: NSObject {
     private func activate(_ p: CBPeripheral) {
         p.delegate = self
         if let service = p.services?.first(where: { $0.uuid == Self.serviceUUID }) {
-            // Discover ALL three characteristics; 1.1 ones MAY be absent.
             p.discoverCharacteristics(
                 [
                     Self.characteristicUUID,
                     Self.connectivityCharacteristicUUID,
                     Self.batteryCharacteristicUUID,
                     Self.linkSlotCharacteristicUUID,
+                    Self.keymapMetaCharacteristicUUID,
+                    Self.keymapDataCharacteristicUUID,
                 ],
                 for: service
             )
@@ -298,6 +321,8 @@ public final class BLEClient: NSObject {
         connectivityCharacteristic = nil
         batteryCharacteristic = nil
         linkSlotCharacteristic = nil
+        keymapMetaCharacteristic = nil
+        keymapDataCharacteristic = nil
         cachedCapability = nil
         latestConnectivity = nil
         linkSlotCache.reset()
@@ -325,6 +350,8 @@ public final class BLEClient: NSObject {
         connectivityCharacteristic = nil
         batteryCharacteristic = nil
         linkSlotCharacteristic = nil
+        keymapMetaCharacteristic = nil
+        keymapDataCharacteristic = nil
         cachedCapability = nil
         latestConnectivity = nil
         linkSlotCache.reset()
@@ -648,6 +675,8 @@ extension BLEClient: CBPeripheralDelegate {
                 Self.connectivityCharacteristicUUID,
                 Self.batteryCharacteristicUUID,
                 Self.linkSlotCharacteristicUUID,
+                Self.keymapMetaCharacteristicUUID,
+                Self.keymapDataCharacteristicUUID,
             ],
             for: service
         )
@@ -664,6 +693,8 @@ extension BLEClient: CBPeripheralDelegate {
         let connChar = chars.first { $0.uuid == Self.connectivityCharacteristicUUID }
         let battChar = chars.first { $0.uuid == Self.batteryCharacteristicUUID }
         let linkChar = chars.first { $0.uuid == Self.linkSlotCharacteristicUUID }
+        let keymapMetaChar = chars.first { $0.uuid == Self.keymapMetaCharacteristicUUID }
+        let keymapDataChar = chars.first { $0.uuid == Self.keymapDataCharacteristicUUID }
 
         // The 1.0 characteristic is REQUIRED; without it this is not a
         // conformant keyboard.
@@ -725,14 +756,21 @@ extension BLEClient: CBPeripheralDelegate {
         delegate?.bleClient(self, didChangeState: .connected)
         delegate?.bleClient(self, didChangeActiveKeyboard: keyboard)
 
-        // Signal the declared KBP MINOR to the UI (card visibility, IV-X1 / U-5).
+        keymapMetaCharacteristic = keymapMetaChar
+        keymapDataCharacteristic = keymapDataChar
+
         let minor: KBPMinor
-        if connChar != nil {
+        if keymapMetaChar != nil {
+            minor = .onePointThree
+        } else if connChar != nil {
             minor = .onePointOne(hasBattery: battChar != nil)
+        } else if linkChar != nil {
+            minor = .onePointTwo
         } else {
             minor = .onePointZero
         }
         delegate?.bleClient(self, didDetermineKBPMinor: minor)
+        delegate?.bleClient(self, didUpdateKeymapAvailability: keymapMetaChar != nil)
 
         publishCandidates()
 

@@ -131,6 +131,7 @@ public enum L10n {
         "Menu_LanguageEnglish": "English",
         "Menu_LanguageChinese": "中文",
         "Menu_ExportDiagnostics": "Export Diagnostics…",
+        "Menu_Keymap": "View Keymap",
         "Menu_Quit": "Quit",
 
         "Corner_TopLeft": "Top-left",
@@ -174,6 +175,12 @@ public enum L10n {
         "HostLink_OnUsb": "Keyboard on USB (not this BLE link)",
         "HostLink_CannotDetermine": "Cannot determine",
         "HostLink_Disconnected": "Disconnected",
+
+        "Keymap_PanelTitle": "Keymap Viewer",
+        "Keymap_NoData": "No keymap data",
+        "Keymap_Loading": "Loading…",
+        "Keymap_Disconnected": "Keyboard disconnected",
+        "Keymap_Unsupported": "Not supported on this keyboard",
     ]
 
     // MARK: Simplified Chinese
@@ -196,6 +203,7 @@ public enum L10n {
         "Menu_LanguageEnglish": "English",
         "Menu_LanguageChinese": "中文",
         "Menu_ExportDiagnostics": "导出诊断信息…",
+        "Menu_Keymap": "查看键位图",
         "Menu_Quit": "退出",
 
         "Corner_TopLeft": "左上",
@@ -239,5 +247,11 @@ public enum L10n {
         "HostLink_OnUsb": "键盘在 USB 输出(非本 BLE 链路)",
         "HostLink_CannotDetermine": "无法确定",
         "HostLink_Disconnected": "未连接",
+
+        "Keymap_PanelTitle": "键位图速查",
+        "Keymap_NoData": "暂无键位图数据",
+        "Keymap_Loading": "加载中…",
+        "Keymap_Disconnected": "键盘已断开",
+        "Keymap_Unsupported": "该键盘不支持此功能",
     ]
 }
