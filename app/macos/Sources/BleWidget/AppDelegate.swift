@@ -3,23 +3,26 @@
 
 import AppKit
 import BleWidgetCore
+import Carbon
 
 final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     private var statusItem: NSStatusItem!
     private var panel: FloatingPanel!
+    private var keymapPanel: KeymapPanel!
     private let client = BLEClient()
     private var state: BLEConnectionState = .connecting
     private var activeKeyboard: CompatibleKeyboard?
     private var candidates: [CompatibleKeyboard] = []
     private var unsupportedKeyboards: [CompatibleKeyboard] = []
+    private var keymapFetcher: KeymapDataFetcher?
+    private let hotkeyRegistrar = HotkeyRegistrar()
+    private var keymapMenuItemEnabled = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         AppSettings().migrateIfNeeded()
 
-        // Resolve the persisted language preference once, before any UI string
-        // is built (FR-002 / FR-004).
         L10n.currentLanguage = AppSettings().resolvedLanguage
 
         panel = FloatingPanel()
@@ -29,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
             panel.orderOut(nil)
         }
 
+        keymapPanel = KeymapPanel()
+
         statusItem = NSStatusBar.system.statusItem(
             withLength: NSStatusItem.variableLength
         )
@@ -37,6 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
 
         client.delegate = self
         client.start()
+
+        hotkeyRegistrar.register(
+            modifiers: UInt32(0x0100 | 0x0200),
+            keyCode: 40
+        ) { [weak self] in
+            self?.showKeymapPanel()
+        }
     }
 
     private func buildMenu() {
@@ -89,6 +101,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         menu.addItem(
             NSMenuItem(title: L10n.text("Menu_Reconnect"), action: #selector(reconnect), keyEquivalent: "r")
         )
+
+        let keymapItem = NSMenuItem(
+            title: L10n.text("Menu_Keymap"),
+            action: #selector(showKeymapPanel),
+            keyEquivalent: ""
+        )
+        keymapItem.target = self
+        keymapItem.isEnabled = keymapMenuItemEnabled
+        menu.addItem(keymapItem)
 
         // Panel visibility toggle (persisted). Checkmark reflects current state.
         let showPanelItem = NSMenuItem(
@@ -292,12 +313,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
     }
 
     func bleClient(_ client: BLEClient, didDetermineKBPMinor minor: KBPMinor) {
-        // IV-X1 / U-5: hide the entire 1.1 card when the keyboard is KBP 1.0.
         switch minor {
         case .onePointZero, .unknown:
             panel.setConnectivityCardVisible(false)
         case .onePointOne:
             panel.setConnectivityCardVisible(true)
+        case .onePointTwo, .onePointThree:
+            panel.setConnectivityCardVisible(true)
+        }
+    }
+
+    func bleClient(_ client: BLEClient, didUpdateKeymapAvailability supported: Bool) {
+        keymapMenuItemEnabled = supported
+        buildMenu()
+    }
+
+    @objc private func showKeymapPanel() {
+        guard keymapMenuItemEnabled,
+              let keyboard = activeKeyboard else { return }
+        keymapPanel.orderFrontRegardless()
+        keymapPanel.showPlaceholderLoading()
+        let fetcher = client.makeKeymapFetcher()
+        let settings = AppSettings()
+        fetcher.fetch(keyboardID: keyboard.identifier, settings: settings) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let snapshot):
+                    self?.keymapPanel.update(snapshot: snapshot)
+                case .failure:
+                    self?.keymapPanel.markDisconnected()
+                }
+            }
         }
     }
 

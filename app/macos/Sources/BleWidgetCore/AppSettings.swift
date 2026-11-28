@@ -40,6 +40,10 @@ public final class AppSettings {
     private static let panelVisibleKey = "panelVisible"
     private static let displayModeKey = "panelDisplayMode"
     private static let languagePrefKey = "uiLanguage"
+    private static let keymapHotkeyModifiersKey = "keymapHotkeyModifiers"
+    private static let keymapHotkeyKeyCodeKey = "keymapHotkeyKeyCode"
+    private static let keymapSnapshotPrefix = "keymapSnapshot"
+    private static let keymapCRCPrefix = "keymapCRC"
 
     private static let legacyPositionPrefix = "totemPanelFrame"
     private static let legacyLockedKey = "totemPanelLocked"
@@ -164,6 +168,38 @@ public final class AppSettings {
 
     public func hasPosition(screenID: String) -> Bool {
         defaults.object(forKey: positionKey(screenID: screenID)) != nil
+    }
+
+    // MARK: - Keymap hotkey (FR-002/FR-012)
+
+    public var keymapHotkeyModifiers: UInt32 {
+        get { UInt32(bitPattern: Int32(defaults.integer(forKey: Self.keymapHotkeyModifiersKey))) }
+        set { defaults.set(Int(newValue), forKey: Self.keymapHotkeyModifiersKey) }
+    }
+
+    public var keymapHotkeyKeyCode: UInt32 {
+        get { UInt32(bitPattern: Int32(defaults.integer(forKey: Self.keymapHotkeyKeyCodeKey))) }
+        set { defaults.set(Int(newValue), forKey: Self.keymapHotkeyKeyCodeKey) }
+    }
+
+    // MARK: - Keymap snapshot cache (FR-003)
+
+    public func keymapSnapshot(for keyboardID: UUID, crc32: UInt32) -> KeymapSnapshot? {
+        let crcKey = "\(Self.keymapCRCPrefix).\(keyboardID.uuidString)"
+        let storedCRC = UInt32(bitPattern: Int32(defaults.integer(forKey: crcKey)))
+        guard storedCRC == crc32 else { return nil }
+        let dataKey = "\(Self.keymapSnapshotPrefix).\(keyboardID.uuidString)"
+        guard let data = defaults.data(forKey: dataKey) else { return nil }
+        return try? JSONDecoder().decode(KeymapSnapshot.self, from: data)
+    }
+
+    public func setKeymapSnapshot(_ snapshot: KeymapSnapshot, for keyboardID: UUID, crc32: UInt32) {
+        let crcKey = "\(Self.keymapCRCPrefix).\(keyboardID.uuidString)"
+        let dataKey = "\(Self.keymapSnapshotPrefix).\(keyboardID.uuidString)"
+        defaults.set(Int(crc32), forKey: crcKey)
+        if let data = try? JSONEncoder().encode(snapshot) {
+            defaults.set(data, forKey: dataKey)
+        }
     }
 
     // MARK: - One-time de-branding migration (MR5 / FR-004)
