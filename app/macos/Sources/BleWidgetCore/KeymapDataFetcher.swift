@@ -25,6 +25,7 @@ public final class KeymapDataFetcher {
     private var dataCompletion: ((Result<Data, Error>) -> Void)?
     private var accumulatedData = Data()
     private var expectedLength: Int?
+    private var activeHandler: ReadBlobHandler?
 
     public init(peripheral: CBPeripheral?,
                 metaCharacteristic: CBCharacteristic?,
@@ -90,7 +91,11 @@ public final class KeymapDataFetcher {
         expectedLength = nil
         let handler = ReadBlobHandler(peripheral: peripheral,
                                       characteristic: characteristic,
-                                      completion: completion)
+                                      completion: { [weak self] result in
+            self?.activeHandler = nil
+            completion(result)
+        })
+        activeHandler = handler
         handler.start()
     }
 }

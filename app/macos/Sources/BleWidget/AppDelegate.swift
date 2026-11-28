@@ -334,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, BLEClientDelegate {
         keymapPanel.orderFrontRegardless()
         keymapPanel.showPlaceholderLoading()
         let fetcher = client.makeKeymapFetcher()
+        keymapFetcher = fetcher
         let settings = AppSettings()
         fetcher.fetch(keyboardID: keyboard.identifier, settings: settings) { [weak self] result in
             DispatchQueue.main.async {
