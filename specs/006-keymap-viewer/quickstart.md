@@ -2,6 +2,30 @@
 
 **Date**: 2026-11-26
 
+## 获取测试版本
+
+### macOS app
+
+正式 release 通过 GitHub tag 触发（`app-v*`）。在 release 发布前，可用 `workflow_dispatch` 触发 `release.yml` 构建测试版本：
+
+1. 打开 [keybeacon Actions](https://github.com/ykiewang/keybeacon/actions/workflows/release.yml)
+2. 点击 **Run workflow**，`version` 填任意标识如 `0.6.0-test`
+3. 等待构建完成（约 10 分钟），到 run 页面底部 **Artifacts** 下载 `.zip`
+
+> 注意：`workflow_dispatch` 构建不创建 GitHub Release，仅产生 CI artifact。
+
+### Totem 键盘固件
+
+固件需从 `zmk-config-totem` 仓库的 CI artifact 下载：
+
+1. 打开 [zmk-config-totem Actions](https://github.com/ykiewang/zmk-config-totem/actions)，找到 `feat/keybeacon-006-keymap` 分支最新通过的 run
+2. 下载 `firmware` artifact，解压得到 `totem_left`、`totem_right`、`settings_reset` 三个 `.uf2` 文件
+3. 先刷 `settings_reset`（左右各一次），再刷 `totem_left` 和 `totem_right`
+
+> 键位图功能只需固件开启 `CONFIG_ZMK_KEYBEACON_KEYMAP=y`，该配置已写入 `totem_left.conf`；右半无需额外配置。
+
+---
+
 ## 前置条件
 
 - 已连接一把支持 KBP 1.3（含 `AA440AA5`/`AA440AA6` 特征）的键盘
