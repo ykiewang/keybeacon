@@ -40,7 +40,7 @@ final class HotkeyRegistrar {
         InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
             var hkID = EventHotKeyID()
             GetEventParameter(event, EventParamName(typeEventHotKeyID),
-                              typeEventHotKeyID, nil,
+                              EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hkID)
             if let userData {
                 let registrar = Unmanaged<HotkeyRegistrar>.fromOpaque(userData).takeUnretainedValue()

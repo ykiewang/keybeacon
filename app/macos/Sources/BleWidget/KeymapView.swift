@@ -64,7 +64,7 @@ final class KeymapView: NSView {
                 width: w * Self.unitSize - Self.gap,
                 height: h * Self.unitSize - Self.gap
             )
-            if !dirtyRect.intersects(rect.insetBy(-20, -20)) && !rect.isNull { continue }
+            if !dirtyRect.intersects(rect.insetBy(dx: -20, dy: -20)) && !rect.isNull { continue }
 
             NSGraphicsContext.current?.saveGraphicsState()
             if k.r != 0 {
